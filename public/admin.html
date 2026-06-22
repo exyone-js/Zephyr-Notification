@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>通知管理系统 - 后台</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>通知管理系统</h1>
+      <div class="header-actions">
+        <button class="btn btn-outline" onclick="window.open('/preview.html')">预览通知</button>
+        <button class="btn btn-outline" id="btnGetCode">获取嵌入代码</button>
+      </div>
+    </header>
+
+    <section class="panel add-panel">
+      <h2>添加新通知</h2>
+      <form id="formAdd">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="title">标题 *</label>
+            <input type="text" id="title" placeholder="通知标题" required>
+          </div>
+          <div class="form-group">
+            <label for="type">类型</label>
+            <select id="type">
+              <option value="info">信息 (info)</option>
+              <option value="success">成功 (success)</option>
+              <option value="warning">警告 (warning)</option>
+              <option value="error">错误 (error)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="content">内容 <span style="font-weight:400;color:#999;font-size:12px">（支持 HTML：&lt;b&gt;粗体&lt;/b&gt; &lt;i&gt;斜体&lt;/i&gt; &lt;a href="#"&gt;链接&lt;/a&gt;）</span></label>
+          <textarea id="content" rows="3" placeholder="通知详细内容（支持 HTML 语法）"></textarea>
+        </div>
+        <div class="form-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="is_emergency">
+            <span>紧急通知 (红色突出显示)</span>
+          </label>
+          <button type="submit" class="btn btn-primary">添加通知</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel emergency-panel" id="emergencyPanel" style="display:none">
+      <h2 class="emergency-title">紧急通知</h2>
+      <div id="emergencyList"></div>
+    </section>
+
+    <section class="panel list-panel">
+      <div class="list-header">
+        <h2>所有通知</h2>
+        <div class="list-actions">
+          <button class="btn btn-sm" id="btnRefresh">刷新</button>
+          <button class="btn btn-sm btn-danger" id="btnClearAll">清空全部</button>
+        </div>
+      </div>
+      <div id="notificationList">
+        <div class="empty">暂无通知</div>
+      </div>
+    </section>
+
+    <div class="modal" id="modalCode">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>嵌入代码</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <p class="modal-hint">将以下代码复制到你网站的 &lt;body&gt; 标签内即可显示通知：</p>
+        <textarea id="embedCode" readonly rows="5"></textarea>
+        <button class="btn btn-primary" id="btnCopy">复制代码</button>
+      </div>
+    </div>
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
+  </div>
+
+  <footer style="text-align:center;padding:20px 0 10px;color:#999;font-size:12px;">&copy; 002.HK</footer>
+
+  <script src="admin.js"></script>
+</body>
+</html>
