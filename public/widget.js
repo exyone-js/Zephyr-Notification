@@ -141,7 +141,7 @@
 
   // Full rebuild (panel open or data changed)
   function fullRender(refresh) {
-    var unread = currentData.filter(function (n) { return !dismissed[n.id]; });
+    var unread = sortUrgentFirst(currentData.filter(function (n) { return !dismissed[n.id]; }));
     var readAll = collectRead(currentData);
 
     if (unread.length) {
@@ -243,7 +243,7 @@
       isRead = true;
     } else {
       container = unreadEl;
-      items = currentData.filter(function (n) { return !dismissed[n.id]; });
+      items = sortUrgentFirst(currentData.filter(function (n) { return !dismissed[n.id]; }));
       page = unreadPage;
       isRead = false;
     }
@@ -277,7 +277,7 @@
   }
 
   function updateTabNums() {
-    var unread = currentData.filter(function (n) { return !dismissed[n.id]; });
+    var unread = sortUrgentFirst(currentData.filter(function (n) { return !dismissed[n.id]; }));
     var readAll = collectRead(currentData);
     var numEls = tabsEl.querySelectorAll('.ns-tab .ns-tab-num');
     if (numEls.length >= 2) {
@@ -331,6 +331,14 @@
     } else {
       refreshListView(tab);
     }
+  }
+
+  function sortUrgentFirst(list) {
+    return list.sort(function (a, b) {
+      if (a.is_emergency && !b.is_emergency) return -1;
+      if (!a.is_emergency && b.is_emergency) return 1;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
   }
 
   function esc(str) {
