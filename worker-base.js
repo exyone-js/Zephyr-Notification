@@ -93,8 +93,15 @@ function store(env, userId) {
   const key = userId ? `ns:${userId}` : 'ns:public';
   return {
     async getAll() {
-      const raw = await KV.get(key, 'json');
-      return (raw || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      let raw = await KV.get(key, 'json') || [];
+      // 兼容旧 single-key 数据
+      const old = await KV.get('notifications', 'json');
+      if (Array.isArray(old)) {
+        raw = raw.concat(old);
+        await KV.put(key, JSON.stringify(raw));
+        await KV.delete('notifications');
+      }
+      return raw.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     },
     async saveAll(list) { await KV.put(key, JSON.stringify(list)); },
     async getActive() { return (await this.getAll()).filter(n => n.is_active); },
@@ -133,12 +140,19 @@ function store(env, userId) {
 
 // 读取所有用户通知（公共接口）
 async function getAllPublic(env) {
-  const list = await env.NOTIFICATIONS.list({ prefix: 'ns:' });
   const all = [];
-  for (const { name } of list.keys) {
-    const raw = await env.NOTIFICATIONS.get(name, 'json');
-    if (Array.isArray(raw)) raw.forEach(n => { if (n.is_active) all.push(n); });
-  }
+  try {
+    const list = await env.NOTIFICATIONS.list({ prefix: 'ns:' });
+    for (const key of list.keys) {
+      const raw = await env.NOTIFICATIONS.get(key.name, 'json');
+      if (Array.isArray(raw)) raw.forEach(n => { if (n.is_active) all.push(n); });
+    }
+  } catch (e) {}
+  // 兼容旧 notifications 键
+  try {
+    const old = await env.NOTIFICATIONS.get('notifications', 'json');
+    if (Array.isArray(old)) old.forEach(n => { if (n.is_active) all.push(n); });
+  } catch (e) {}
   return all.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
@@ -168,7 +182,9 @@ app.get('/api/notifications/active', async c => {
   const userId = c.req.query('u');
   if (userId) {
     const db = store(c.env, userId);
-    return c.json({ success: true, data: await db.getActive() });
+    const data = await db.getActive();
+    if (data.length) return c.json({ success: true, data });
+    // 用户无数据时回退到公共
   }
   return c.json({ success: true, data: await getAllPublic(c.env) });
 });

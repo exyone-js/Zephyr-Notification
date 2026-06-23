@@ -103,7 +103,7 @@ function renderItem(n) {
           ${!n.is_active ? '<span class="badge" style="background:#eee;color:#999;">已停用</span>' : ''}
         </div>
         ${n.content ? `<div class="info-content">${n.content}</div>` : ''}
-        <div class="info-meta">${n.created_at}</div>
+        <div class="info-meta">ID: ${n.id.slice(0, 8)}... | ${n.created_at}</div>
       </div>
       <div class="item-actions">
         <button onclick="toggleActive('${n.id}', ${n.is_active})">${n.is_active ? '停用' : '启用'}</button>

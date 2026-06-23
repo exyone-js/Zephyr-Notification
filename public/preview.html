@@ -35,7 +35,7 @@
 
       <div class="widget-area">
         <div class="widget-area-label">通知组件嵌入区域</div>
-        <script src="widget.js"></script>
+        <div id="widget-target"></div>
       </div>
 
       <p style="margin-top:20px;">上面的通知组件就是用户在你网站上看到的实际样子。你可以在后台管理页面添加、删除、启停通知，此处会自动更新。</p>
@@ -43,6 +43,24 @@
   </div>
 
   <footer style="text-align:center;padding:20px 0 10px;color:#999;font-size:12px;">Powered By <a href="https://github.com/govmoe/Notification-System" style="color:#999;">002.HK</a></footer>
+
+  <script>
+    // 获取当前登录用户的 ID，加载专属小铃铛
+    (async function () {
+      try {
+        var res = await fetch('/api/auth/me');
+        var data = await res.json();
+        var uid = (data.success && data.data) ? data.data.id : '';
+        var script = document.createElement('script');
+        script.src = 'widget.js' + (uid ? '?u=' + uid : '');
+        document.getElementById('widget-target').appendChild(script);
+      } catch (e) {
+        var script = document.createElement('script');
+        script.src = 'widget.js';
+        document.getElementById('widget-target').appendChild(script);
+      }
+    })();
+  </script>
 
 </body>
 </html>
