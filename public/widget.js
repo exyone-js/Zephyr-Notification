@@ -402,9 +402,11 @@
           badge.textContent = unread.length > 99 ? '99+' : unread.length;
           badge.style.display = unread.length ? 'flex' : 'none';
 
-          // 实时刷新当前列表
-          if (isOpen) refreshListView(tab);
-        }
+          // 实时刷新：有新通知时自动切到未读标签
+          if (isOpen) {
+            if (unread.length && tab !== 'unread') { tab = 'unread'; readPage = 0; unreadPage = 0; fullRender(true); }
+            else refreshListView(tab);
+          }
       })
       .catch(function () {});
   }
@@ -425,5 +427,5 @@
 
   load();
   connectSSE();
-  setInterval(load, 30000);
+  setInterval(load, 5000);
 })();
