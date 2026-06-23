@@ -115,9 +115,14 @@ app.get('/api/notifications', authMiddleware, (req, res) => {
   res.json({ success: true, data: db.getAll(req.user.id) });
 });
 
-// 公共接口（小铃铛用，合并所有用户通知）
+// 公共接口（小铃铛用）
 app.get('/api/notifications/active', (req, res) => {
-  res.json({ success: true, data: db.getActivePublic() });
+  const userId = req.query.u;
+  if (userId) {
+    res.json({ success: true, data: db.getActive(userId) });
+  } else {
+    res.json({ success: true, data: db.getActivePublic() });
+  }
 });
 
 app.get('/api/notifications/emergency', (req, res) => {
@@ -183,12 +188,13 @@ app.post('/api/notifications/clear-all', authMiddleware, (req, res) => {
   res.json({ success: true, message: '已清空所有通知' });
 });
 
-// 获取嵌入代码
+// 获取嵌入代码（支持用户隔离）
 app.get('/api/widget-code', (req, res) => {
   const host = req.get('host');
   const protocol = req.protocol;
   const baseUrl = `${protocol}://${host}`;
-  const code = `<script src="${baseUrl}/widget.js"></script>`;
+  const userId = req.query.u || '';
+  const code = `<script src="${baseUrl}/widget.js${userId ? '?u=' + userId : ''}"></script>`;
   res.json({ success: true, data: code });
 });
 

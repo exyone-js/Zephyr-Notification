@@ -186,7 +186,9 @@ $('#btnClearAll').addEventListener('click', async () => {
 // ========== 嵌入代码弹窗 ==========
 
 $('#btnGetCode').addEventListener('click', async () => {
-  const res = await fetchJSON('/api/widget-code');
+  const me = await fetchJSON('/api/auth/me');
+  const uid = (me.success && me.data) ? '?u=' + me.data.id : '';
+  const res = await fetchJSON('/api/widget-code' + uid);
   if (res.success) {
     $('#embedCode').value = res.data;
     openModal();

@@ -163,8 +163,13 @@ app.get('/api/notifications', authMiddleware, async c => {
   return c.json({ success: true, data: await db.getAll() });
 });
 
-// 公共接口（小铃铛用，合并所有用户通知）
+// 公共接口（小铃铛用）
 app.get('/api/notifications/active', async c => {
+  const userId = c.req.query('u');
+  if (userId) {
+    const db = store(c.env, userId);
+    return c.json({ success: true, data: await db.getActive() });
+  }
   return c.json({ success: true, data: await getAllPublic(c.env) });
 });
 
@@ -230,7 +235,8 @@ app.post('/api/notifications/clear-all', authMiddleware, async c => {
 });
 app.get('/api/widget-code', c => {
   const u = new URL(c.req.url);
-  return c.json({ success: true, data: `<script src="${u.protocol}//${u.host}/widget.js"></script>` });
+  const userId = u.searchParams.get('u') || '';
+  return c.json({ success: true, data: `<script src="${u.protocol}//${u.host}/widget.js${userId ? '?u=' + userId : ''}"></script>` });
 });
 
 export default app;
