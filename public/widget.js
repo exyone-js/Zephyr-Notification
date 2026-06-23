@@ -102,7 +102,11 @@
   var root = document.createElement('div');
   root.id = 'ns-widget-root';
   root.innerHTML = '<button class="ns-toggle" title="通知">' + ICONS.bell + '<span class="ns-badge-count" style="display:none">0</span></button><div class="ns-panel"></div>';
-  SCRIPT.parentNode.insertBefore(root, SCRIPT.nextSibling);
+  if (SCRIPT && SCRIPT.parentNode) {
+    SCRIPT.parentNode.insertBefore(root, SCRIPT.nextSibling);
+  } else {
+    document.body.appendChild(root);
+  }
 
   var toggle = root.querySelector('.ns-toggle');
   var panel = root.querySelector('.ns-panel');
@@ -407,6 +411,7 @@
             if (unread.length && tab !== 'unread') { tab = 'unread'; readPage = 0; unreadPage = 0; fullRender(true); }
             else refreshListView(tab);
           }
+        }
       })
       .catch(function () {});
   }
