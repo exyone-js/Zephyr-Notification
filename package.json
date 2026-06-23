@@ -10,9 +10,12 @@
     "deploy:worker": "wrangler deploy"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^4.18.2",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
     "wrangler": "^4.103.0"

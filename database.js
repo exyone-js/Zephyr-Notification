@@ -4,8 +4,17 @@ const path = require('path');
 const DB_FILE = path.join(__dirname, 'data.json');
 
 function read() {
-  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
-  catch { return []; }
+  try {
+    const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    // 迁移旧格式（数组）为新格式（按用户分组）
+    if (Array.isArray(raw)) {
+      const migrated = { _migrated: raw };
+      write(migrated);
+      return migrated;
+    }
+    return raw || {};
+  }
+  catch { return {}; }
 }
 
 function write(data) {
@@ -26,24 +35,33 @@ function now() {
 }
 
 module.exports = {
-  getAll() {
-    return read().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  getAll(userId) {
+    const all = read();
+    const list = all[userId] || [];
+    return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getActive() {
-    return read().filter(n => n.is_active).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  getActive(userId) {
+    const all = read();
+    const list = all[userId] || [];
+    return list.filter(n => n.is_active).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getEmergency() {
-    return read().filter(n => n.is_emergency && n.is_active).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  getEmergency(userId) {
+    const all = read();
+    const list = all[userId] || [];
+    return list.filter(n => n.is_emergency && n.is_active).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getById(id) {
-    return read().find(n => n.id === id) || null;
+  getById(userId, id) {
+    const all = read();
+    const list = all[userId] || [];
+    return list.find(n => n.id === id) || null;
   },
 
-  create({ title, content, type, is_emergency }) {
-    const data = read();
+  create(userId, { title, content, type, is_emergency }) {
+    const all = read();
+    if (!all[userId]) all[userId] = [];
     const item = {
       id: uuid(),
       title,
@@ -54,17 +72,19 @@ module.exports = {
       created_at: now(),
       updated_at: now()
     };
-    data.push(item);
-    write(data);
+    all[userId].push(item);
+    write(all);
     return item;
   },
 
-  update(id, fields) {
-    const data = read();
-    const idx = data.findIndex(n => n.id === id);
+  update(userId, id, fields) {
+    const all = read();
+    const list = all[userId] || [];
+    if (!all[userId]) all[userId] = [];
+    const idx = list.findIndex(n => n.id === id);
     if (idx === -1) return null;
-    const existing = data[idx];
-    data[idx] = {
+    const existing = list[idx];
+    list[idx] = {
       ...existing,
       title: fields.title !== undefined ? fields.title : existing.title,
       content: fields.content !== undefined ? fields.content : existing.content,
@@ -73,21 +93,42 @@ module.exports = {
       is_active: fields.is_active !== undefined ? !!fields.is_active : existing.is_active,
       updated_at: now()
     };
-    write(data);
-    return data[idx];
+    write(all);
+    return list[idx];
   },
 
-  delete(id) {
-    const data = read();
-    const idx = data.findIndex(n => n.id === id);
+  delete(userId, id) {
+    const all = read();
+    const list = all[userId] || [];
+    const idx = list.findIndex(n => n.id === id);
     if (idx === -1) return { changes: 0 };
-    data.splice(idx, 1);
-    write(data);
+    list.splice(idx, 1);
+    write(all);
     return { changes: 1 };
   },
 
-  deleteAll() {
-    write([]);
+  deleteAll(userId) {
+    const all = read();
+    all[userId] = [];
+    write(all);
     return { changes: 1 };
+  },
+
+  // 公共接口：合并所有用户的通知
+  getAllPublic() {
+    const all = read();
+    const list = [];
+    Object.values(all).forEach(arr => {
+      if (Array.isArray(arr)) arr.forEach(n => list.push(n));
+    });
+    return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  },
+
+  getActivePublic() {
+    return this.getAllPublic().filter(n => n.is_active);
+  },
+
+  getEmergencyPublic() {
+    return this.getAllPublic().filter(n => n.is_emergency && n.is_active);
   }
 };

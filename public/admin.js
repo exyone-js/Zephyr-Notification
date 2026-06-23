@@ -11,9 +11,35 @@ function toast(msg, type = 'success') {
 }
 
 async function fetchJSON(url, options = {}) {
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+  const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
   return res.json();
 }
+
+// ========== GitHub 认证 ==========
+
+async function checkAuth() {
+  const res = await fetchJSON('/api/auth/me');
+  const userArea = $('#userInfo');
+  const mainContainer = $('#mainContainer');
+  const loginPage = $('#loginPage');
+
+  if (res.success && res.data) {
+    const user = res.data;
+    mainContainer.style.display = 'block';
+    loginPage.classList.remove('active');
+    userArea.innerHTML = `
+      <img src="${escapeHtml(user.avatar)}" alt="" class="user-avatar">
+      <span class="user-name">${escapeHtml(user.name || user.login)}</span>
+      <a href="/auth/logout" class="user-logout">退出</a>
+    `;
+    loadNotifications();
+  } else {
+    mainContainer.style.display = 'none';
+    loginPage.classList.add('active');
+  }
+}
+
+checkAuth();
 
 // ========== 加载通知列表 ==========
 
@@ -22,6 +48,7 @@ async function loadNotifications() {
   const list = $('#notificationList');
   const emergencyList = $('#emergencyList');
   const emergencyPanel = $('#emergencyPanel');
+  const query = ($('#searchInput')?.value || '').toLowerCase();
 
   if (!res.success || !res.data.length) {
     list.innerHTML = '<div class="empty">暂无通知</div>';
@@ -30,18 +57,33 @@ async function loadNotifications() {
   }
 
   const emergencies = res.data.filter(n => n.is_emergency && n.is_active);
-  const all = res.data;
+  let all = res.data;
+
+  // Apply search filter
+  if (query) {
+    all = all.filter(n =>
+      n.title.toLowerCase().includes(query) ||
+      (n.content && n.content.toLowerCase().includes(query))
+    );
+  }
 
   // 紧急通知面板
   if (emergencies.length > 0) {
     emergencyPanel.style.display = '';
-    emergencyList.innerHTML = emergencies.map(n => renderItem(n)).join('');
+    const filteredEmergencies = query
+      ? emergencies.filter(n => n.title.toLowerCase().includes(query) || (n.content && n.content.toLowerCase().includes(query)))
+      : emergencies;
+    emergencyList.innerHTML = filteredEmergencies.length
+      ? filteredEmergencies.map(n => renderItem(n)).join('')
+      : '<div class="empty" style="padding:20px">无匹配结果</div>';
   } else {
     emergencyPanel.style.display = 'none';
   }
 
   // 所有通知
-  list.innerHTML = all.map(n => renderItem(n)).join('');
+  list.innerHTML = all.length
+    ? all.map(n => renderItem(n)).join('')
+    : '<div class="empty">无匹配结果</div>';
 }
 
 function renderItem(n) {
@@ -133,6 +175,8 @@ async function toggleEmergency(id, set) {
 
 $('#btnRefresh').addEventListener('click', loadNotifications);
 
+$('#searchInput').addEventListener('input', loadNotifications);
+
 $('#btnClearAll').addEventListener('click', async () => {
   if (!confirm('确定要清空所有通知吗？此操作不可恢复！')) return;
   const res = await fetchJSON(`${API}/clear-all`, { method: 'POST' });
@@ -166,5 +210,4 @@ $('#btnCopy').addEventListener('click', () => {
 });
 
 // ========== 初始加载 ==========
-
-loadNotifications();
+// 认证检查已在 checkAuth() 中处理，成功后会调用 loadNotifications()
