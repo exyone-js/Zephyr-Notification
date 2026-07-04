@@ -122,7 +122,10 @@ function store(env, userId) {
       const all = await this.getAll();
       const idx = all.findIndex(n => n.id === id);
       if (idx === -1) return null;
-      all[idx] = { ...all[idx], ...fields, updated_at: now() };
+      const allowed = ['title', 'content', 'type', 'is_emergency', 'is_active'];
+      const update = {};
+      allowed.forEach(k => { if (fields[k] !== undefined) update[k] = fields[k]; });
+      all[idx] = { ...all[idx], ...update, updated_at: now() };
       await this.saveAll(all);
       return all[idx];
     },
@@ -228,13 +231,32 @@ app.get('/api/notifications/:id', authMiddleware, async c => {
 app.post('/api/notifications', authMiddleware, async c => {
   const db = store(c.env, c.get('user').id);
   const body = await c.req.json();
-  if (!body.title) return c.json({ success: false, message: '标题不能为空' }, 400);
-  const item = await db.create(body);
+  if (!body.title || typeof body.title !== 'string') return c.json({ success: false, message: '标题不能为空' }, 400);
+  if (body.title.length > 200) return c.json({ success: false, message: '标题过长' }, 400);
+  if (body.content && (typeof body.content !== 'string' || body.content.length > 10000)) return c.json({ success: false, message: '内容无效' }, 400);
+  if (body.type && !['info', 'success', 'warning', 'error'].includes(body.type)) return c.json({ success: false, message: '类型无效' }, 400);
+  const item = await db.create({ title: body.title, content: body.content, type: body.type, is_emergency: !!body.is_emergency });
   return c.json({ success: true, data: item }, 201);
 });
 app.put('/api/notifications/:id', authMiddleware, async c => {
   const db = store(c.env, c.get('user').id);
-  const item = await db.update(c.req.param('id'), await c.req.json());
+  const body = await c.req.json();
+  const fields = {};
+  if (body.title !== undefined) {
+    if (typeof body.title !== 'string' || body.title.length > 200) return c.json({ success: false, message: '标题无效' }, 400);
+    fields.title = body.title;
+  }
+  if (body.content !== undefined) {
+    if (typeof body.content !== 'string' || body.content.length > 10000) return c.json({ success: false, message: '内容无效' }, 400);
+    fields.content = body.content;
+  }
+  if (body.type !== undefined) {
+    if (!['info', 'success', 'warning', 'error'].includes(body.type)) return c.json({ success: false, message: '类型无效' }, 400);
+    fields.type = body.type;
+  }
+  if (body.is_emergency !== undefined) fields.is_emergency = !!body.is_emergency;
+  if (body.is_active !== undefined) fields.is_active = !!body.is_active;
+  const item = await db.update(c.req.param('id'), fields);
   if (!item) return c.json({ success: false, message: '通知不存在' }, 404);
   return c.json({ success: true, data: item });
 });

@@ -353,10 +353,41 @@
     return div.innerHTML;
   }
 
+  // XSS 过滤：移除危险标签和事件处理
+  function sanitize(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.innerHTML = str;
+    // 递归清理危险元素和属性
+    function clean(node) {
+      if (node.nodeType === 1) {
+        if (node.tagName === 'SCRIPT' || node.tagName === 'IFRAME' || node.tagName === 'OBJECT' || node.tagName === 'EMBED') {
+          node.remove(); return;
+        }
+        var attrs = node.attributes;
+        for (var i = attrs.length - 1; i >= 0; i--) {
+          if (/^on/i.test(attrs[i].name) || (attrs[i].name === 'href' && /^javascript:/i.test(attrs[i].value))) {
+            node.removeAttribute(attrs[i].name);
+          }
+        }
+      }
+      var children = node.childNodes;
+      for (var c = children.length - 1; c >= 0; c--) { clean(children[c]); }
+    }
+    // Use clone to avoid mutating the div
+    var frag = document.createDocumentFragment();
+    while (div.firstChild) { frag.appendChild(div.firstChild); }
+    clean(frag);
+    var tmp = document.createElement('div');
+    tmp.appendChild(frag);
+    return tmp.innerHTML;
+  }
+
   // Markdown + HTML 渲染
   function md(str) {
     if (!str) return '';
-    // 代码块（先处理，避免内部 Markdown 被解析）
+    str = sanitize(str);
+    // 代码块
     str = str.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
     // 行内代码
     str = str.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -364,16 +395,15 @@
     str = str.replace(/^### (.+)$/gm, '<h4>$1</h4>');
     str = str.replace(/^## (.+)$/gm, '<h3>$1</h3>');
     str = str.replace(/^# (.+)$/gm, '<h2>$1</h2>');
-    // 粗体 / 斜体
+    // 粗斜体
     str = str.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
     str = str.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     str = str.replace(/\*(.+?)\*/g, '<em>$1</em>');
     // 链接
     str = str.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    // 无序列表
+    // 列表
     str = str.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
     str = str.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-    // 换行
     str = str.replace(/\n\n/g, '<br><br>');
     return str;
   }

@@ -29,16 +29,15 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.disable('x-powered-by');
 
-// 简易限流
+// 简易限流（单进程用，生产建议用 express-rate-limit）
 const rateLimit = new Map();
+setInterval(() => { rateLimit.clear(); }, 60000);
 app.use((req, res, next) => {
   const ip = req.ip;
   const now = Date.now();
-  if (!rateLimit.has(ip)) rateLimit.set(ip, []);
-  const requests = rateLimit.get(ip).filter(t => now - t < 60000);
-  if (requests.length > 60) return res.status(429).json({ success: false, message: '请求过于频繁' });
-  requests.push(now);
-  rateLimit.set(ip, requests);
+  const count = (rateLimit.get(ip) || 0) + 1;
+  if (count > 100) return res.status(429).json({ success: false, message: '请求过于频繁' });
+  rateLimit.set(ip, count);
   next();
 });
 
@@ -49,8 +48,7 @@ function githubRequest(urlPath, options = {}) {
   return new Promise((resolve, reject) => {
     const req = https.request(url, {
       method: options.method || 'GET',
-      headers: { 'User-Agent': 'Notification-System', ...options.headers },
-      rejectUnauthorized: false
+      headers: { 'User-Agent': 'Notification-System', ...options.headers }
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -79,12 +77,11 @@ app.get('/auth/github/callback', async (req, res) => {
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, client_secret: GITHUB_CLIENT_SECRET, code, redirect_uri: GITHUB_CALLBACK_URL })
     });
-    console.log('Token response:', tokenRes);
     if (!tokenRes.access_token) return res.redirect('/admin.html?error=token_failed');
     const user = await githubRequest('https://api.github.com/user', {
       headers: { 'Authorization': `Bearer ${tokenRes.access_token}`, 'Accept': 'application/json' }
     });
-    console.log('User info:', user);
+    if (!user || !user.id) return res.redirect('/admin.html?error=auth_failed');
     const token = jwt.sign({ id: user.id, login: user.login, name: user.name, avatar: user.avatar_url }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('ns_token', token, {
       httpOnly: true,
@@ -199,7 +196,22 @@ app.post('/api/notifications', authMiddleware, (req, res) => {
 });
 
 app.put('/api/notifications/:id', authMiddleware, (req, res) => {
-  const item = db.update(req.user.id, req.params.id, req.body);
+  const fields = {};
+  if (req.body.title !== undefined) {
+    if (typeof req.body.title !== 'string' || req.body.title.length > 200) return res.status(400).json({ success: false, message: '标题无效' });
+    fields.title = req.body.title;
+  }
+  if (req.body.content !== undefined) {
+    if (typeof req.body.content !== 'string' || req.body.content.length > 10000) return res.status(400).json({ success: false, message: '内容无效' });
+    fields.content = req.body.content;
+  }
+  if (req.body.type !== undefined) {
+    if (!['info', 'success', 'warning', 'error'].includes(req.body.type)) return res.status(400).json({ success: false, message: '类型无效' });
+    fields.type = req.body.type;
+  }
+  if (req.body.is_emergency !== undefined) fields.is_emergency = !!req.body.is_emergency;
+  if (req.body.is_active !== undefined) fields.is_active = !!req.body.is_active;
+  const item = db.update(req.user.id, req.params.id, fields);
   if (!item) return res.status(404).json({ success: false, message: '通知不存在' });
   res.json({ success: true, data: item });
 });
