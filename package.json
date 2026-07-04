@@ -11,8 +11,8 @@
     "build:worker": "node scripts/buildWorker.js",
     "build:edgeone": "node scripts/buildEdgeOne.js",
     "bump:version": "node scripts/bumpVersion.js",
-    "deploy": "npm run build && wrangler deploy",
-    "preview": "npm run build && wrangler dev"
+    "deploy": "npm run build:worker && wrangler deploy",
+    "preview": "npm run build:worker && wrangler dev"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
