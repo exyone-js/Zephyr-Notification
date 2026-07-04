@@ -202,7 +202,7 @@ node scripts/buildEdgeOne.js
 
 ## 许可证
 
-MIT License
+BSD-3-Clause License
 
 ---
 
