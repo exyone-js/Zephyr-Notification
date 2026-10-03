@@ -1,5 +1,7 @@
-name = "notification-system"
+name = "notify"
 main = "worker.js"
+workers_dev = true
+preview_urls = true
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
