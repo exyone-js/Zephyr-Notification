@@ -7,9 +7,7 @@
 const NotifyRepo = require('../../domainCond/notifyModel/notifyRepo');
 
 function now() {
-  const d = new Date();
-  d.setHours(d.getHours() + 8);
-  return d.toISOString().replace('T', ' ').slice(0, 19);
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
 class MemRepo extends NotifyRepo {

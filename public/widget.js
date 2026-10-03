@@ -9,45 +9,128 @@
     USER_ID = params.get('u') || '';
   }
 
-  // ─── i18n ─────────────────────────────────────────────
-  var W_STR = {
-    zh_CN: {
+  // 未显式传入 u 且与宿主同源时（如预览页），尝试自动探测登录用户 id；跨域静默跳过
+  function resolveUserId() {
+    if (USER_ID || API_HOST !== window.location.origin) return Promise.resolve();
+    return fetchJson(API_HOST + '/api/auth/me').then(function (res) {
+      if (res && res.success && res.data && res.data.id) USER_ID = String(res.data.id);
+    }).catch(function () {});
+  }
+
+  // i18n：接口不可用时的兜底语言配置（与 locales/config.json 保持一致）
+  var I18N_FALLBACK_CONFIG = {
+    default: 'zh-CN',
+    locales: [
+      { code: 'zh-CN', name: '简体中文' },
+      { code: 'en-US', name: 'English' },
+      { code: 'ja-JP', name: '日本語' },
+      { code: 'ko-KR', name: '한국어' },
+      { code: 'fr-FR', name: 'Français' },
+      { code: 'de-DE', name: 'Deutsch' }
+    ]
+  };
+  // 网络失败时的内置兜底文案（至少保证中/英可用）
+  var I18N_FALLBACK_STR = {
+    'zh-CN': {
       read: '已读', unread: '未读', emptyRead: '暂无已读通知',
       emptyUnread: '没有未读通知', prev: '上一页', next: '下一页',
-      emergency: '紧急', noData: '暂无通知', langLabel: '语言'
+      emergency: '紧急', noData: '暂无通知', bellTitle: '通知'
     },
-    en: {
+    'en-US': {
       read: 'Read', unread: 'Unread', emptyRead: 'No read notifications',
       emptyUnread: 'No unread notifications', prev: 'Prev', next: 'Next',
-      emergency: 'Emergency', noData: 'No notifications', langLabel: 'Language'
+      emergency: 'Emergency', noData: 'No notifications', bellTitle: 'Notifications'
     }
   };
 
+  var i18nConfig = I18N_FALLBACK_CONFIG;
+  var i18nCache = {};
+  var wLang = 'zh-CN';
+  var wStr = I18N_FALLBACK_STR['zh-CN'];
+
+  function fetchJson(url) {
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  }
+
+  function isValidLang(code) {
+    return i18nConfig.locales.some(function (l) { return l.code === code; });
+  }
+
+  // 语言探测优先级：管理员指定(auto 以外) > 访客手动选择(ns_widget_lang) > 浏览器语言(精确/主标签回退) > 默认语言
   function detectLang(configLang) {
-    if (configLang && configLang !== 'auto') return configLang;
-    var saved = localStorage.getItem('ns_widget_lang');
-    if (saved === 'zh-CN' || saved === 'en') return saved;
-    return navigator.language && navigator.language.startsWith('en') ? 'en' : 'zh-CN';
+    if (configLang && configLang !== 'auto' && isValidLang(configLang)) return configLang;
+    var saved = null;
+    try { saved = localStorage.getItem('ns_widget_lang'); } catch (e) {}
+    if (saved && isValidLang(saved)) return saved;
+
+    var langs = (navigator.languages && navigator.languages.length)
+      ? navigator.languages
+      : [navigator.language || navigator.userLanguage || ''];
+    for (var i = 0; i < langs.length; i++) {
+      var tag = String(langs[i] || '').toLowerCase();
+      if (!tag) continue;
+      var exact = i18nConfig.locales.filter(function (l) { return l.code.toLowerCase() === tag; })[0];
+      if (exact) return exact.code;
+      var primary = tag.split('-')[0];
+      var prefix = i18nConfig.locales.filter(function (l) { return l.code.toLowerCase().split('-')[0] === primary; })[0];
+      if (prefix) return prefix.code;
+    }
+    return i18nConfig.default || 'zh-CN';
   }
 
-  function T(key, langMap) {
-    return (langMap && langMap[key]) || key;
+  function stringsFromJson(json) {
+    return {
+      read: json['widget.read'],
+      unread: json['widget.unread'],
+      emptyRead: json['widget.emptyRead'],
+      emptyUnread: json['widget.emptyUnread'],
+      prev: json['widget.prev'],
+      next: json['widget.next'],
+      emergency: json['notify.badgeEmergency'],
+      noData: json['widget.noData'],
+      bellTitle: json['widget.bellTitle']
+    };
   }
 
-  // ─── Config defaults ────────────────────────────────────
+  function applyLang(code, json) {
+    var base = I18N_FALLBACK_STR[code]
+      || I18N_FALLBACK_STR[i18nConfig.default]
+      || I18N_FALLBACK_STR['zh-CN'];
+    var merged = {};
+    Object.keys(base).forEach(function (k) { merged[k] = base[k]; });
+    if (json) {
+      var mapped = stringsFromJson(json);
+      Object.keys(mapped).forEach(function (k) {
+        if (mapped[k] !== undefined && mapped[k] !== null) merged[k] = mapped[k];
+      });
+    }
+    wStr = merged;
+    wLang = code;
+    if (toggle) toggle.title = wStr.bellTitle;
+  }
+
+  function loadLangStrings(code) {
+    if (i18nCache[code]) { applyLang(code, i18nCache[code]); return Promise.resolve(); }
+    return fetchJson(API_HOST + '/api/i18n/' + encodeURIComponent(code) + '.json').then(function (json) {
+      if (json) i18nCache[code] = json;
+      applyLang(code, json);
+    }).catch(function () { applyLang(code, null); });
+  }
+
+  // 配置默认值（Corporate Clean 企业简洁配色）
   var DEF = {
     position: 'top-right', offsetX: 20, offsetY: 20,
-    buttonSize: 48, buttonColor: '#ffffff', buttonBg: '#1976d2',
-    showBadge: true, badgeBg: '#ff5252', badgeColor: '#ffffff',
+    buttonSize: 48, buttonColor: '#ffffff', buttonBg: '#2563eb',
+    showBadge: true, badgeBg: '#dc2626', badgeColor: '#ffffff',
     panelWidth: 400, panelMaxHeight: 520,
     animationEnabled: true, soundEnabled: true,
     borderRadius: 12, language: 'auto',
-    primaryColor: '#1976d2', successColor: '#388e3c',
-    warningColor: '#f57c00', errorColor: '#d32f2f'
+    primaryColor: '#2563eb', successColor: '#16a34a',
+    warningColor: '#d97706', errorColor: '#dc2626'
   };
   var cfg = {};
 
-  // ─── Icons ──────────────────────────────────────────────
+  // SVG 图标集
   var ICONS = {
     info: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM11 9h2V7h-2v2z"/></svg>',
     success: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>',
@@ -60,74 +143,81 @@
     globe: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>'
   };
 
-  // ─── CSS (using CSS custom properties) ────────────────
+  // 注入样式：Corporate Clean 企业简洁风（扁平、圆角、轻投影、动画≤200ms）
   var CSS = '' +
-    '#ns-widget-root{position:fixed;z-index:2147483647;font-family:Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5;direction:ltr}' +
+    '#ns-widget-root{position:fixed;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans","Noto Sans SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5;direction:ltr}' +
     '#ns-widget-root *{box-sizing:border-box}' +
-    '.ns-toggle{width:var(--ns-tgl-w, 48px);height:var(--ns-tgl-w, 48px);border-radius:50%;background:var(--ns-tgl-bg, #1976d2);border:1px solid rgba(0,0,0,.05);box-shadow:0 4px 12px rgba(0,0,0,.1),0 2px 4px rgba(0,0,0,.06);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ns-tgl-clr, #ffffff);transition:all .25s cubic-bezier(.4,0,.2,1);margin-left:auto;position:relative}' +
-    '.ns-toggle:hover{box-shadow:0 6px 16px rgba(0,0,0,.15),0 3px 6px rgba(0,0,0,.08);transform:translateY(-2px)}' +
-    '.ns-toggle:active{transform:translateY(0) scale(.95);box-shadow:0 2px 8px rgba(0,0,0,.12)}' +
-    '.ns-badge-count{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--ns-bdg-bg, #ff5252);color:var(--ns-bdg-clr, #ffffff);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.4);pointer-events:none;border:2px solid #fff}' +
-    '.ns-panel{position:absolute;top:var(--ns-pnl-top);bottom:var(--ns-pnl-bottom);left:var(--ns-pnl-left);right:var(--ns-pnl-right);width:var(--ns-pnl-w);max-height:var(--ns-pnl-mh);overflow-y:auto;overflow-x:hidden;display:none;border-radius:var(--ns-rad)px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.12),0 4px 12px rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.05)}' +
+    '.ns-toggle{width:var(--ns-tgl-w, 48px);height:var(--ns-tgl-w, 48px);border-radius:12px;background:var(--ns-tgl-bg, #2563eb);border:1px solid rgba(0,0,0,.06);box-shadow:0 1px 2px rgba(16,24,40,.06),0 2px 6px rgba(16,24,40,.10);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ns-tgl-clr, #ffffff);transition:transform .15s cubic-bezier(.16,1,.3,1),box-shadow .15s cubic-bezier(.16,1,.3,1),background-color .15s ease;margin-left:auto;position:relative}' +
+    '.ns-toggle:hover{box-shadow:0 2px 6px rgba(16,24,40,.10),0 4px 12px rgba(16,24,40,.12);transform:translateY(-1px)}' +
+    '.ns-toggle:active{transform:translateY(0) scale(.98);box-shadow:0 1px 2px rgba(16,24,40,.08)}' +
+    '.ns-toggle:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}' +
+    '.ns-badge-count{position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;border-radius:999px;background:var(--ns-bdg-bg, #dc2626);color:var(--ns-bdg-clr, #ffffff);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;line-height:1;box-shadow:0 1px 3px rgba(220,38,38,.35);pointer-events:none;border:2px solid #fff}' +
+    '.ns-panel{position:absolute;top:var(--ns-pnl-top);bottom:var(--ns-pnl-bottom);left:var(--ns-pnl-left);right:var(--ns-pnl-right);width:var(--ns-pnl-w);max-height:var(--ns-pnl-mh);overflow-y:auto;overflow-x:hidden;display:none;border-radius:var(--ns-rad)px;background:#fff;box-shadow:0 8px 28px rgba(16,24,40,.12),0 2px 8px rgba(16,24,40,.06);border:1px solid #e5e7eb}' +
     '.ns-panel.ns-open{display:block}' +
     '.ns-panel::-webkit-scrollbar{width:6px}' +
     '.ns-panel::-webkit-scrollbar-track{background:transparent}' +
-    '.ns-panel::-webkit-scrollbar-thumb{background:rgba(0,0,0,.12);border-radius:3px}' +
-    '.ns-panel::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.2)}' +
-    '.ns-tabs{display:flex;background:#fafafa;border-radius:var(--ns-rad)px var(--ns-rad)px 0 0;border-bottom:1px solid rgba(0,0,0,.06);position:sticky;top:0;z-index:1}' +
-    '.ns-tab{flex:1;padding:14px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:rgba(0,0,0,.5);font-family:inherit;transition:all .2s;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px;position:relative}' +
-    '.ns-tab:hover{color:rgba(0,0,0,.7);background:rgba(0,0,0,.02)}' +
+    '.ns-panel::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}' +
+    '.ns-panel::-webkit-scrollbar-thumb:hover{background:#9ca3af}' +
+    '.ns-tabs{display:flex;background:#f8fafc;border-radius:var(--ns-rad)px var(--ns-rad)px 0 0;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:1}' +
+    '.ns-tab{flex:1;padding:13px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:#6b7280;font-family:inherit;transition:color .15s ease,background-color .15s ease;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px;position:relative}' +
+    '.ns-tab:hover{color:#374151;background:#f3f4f6}' +
+    '.ns-tab:focus-visible{outline:2px solid #3b82f6;outline-offset:-2px}' +
     '.ns-tab.ns-active{color:var(--ns-primary);background:#fff}' +
     '.ns-tab.ns-active::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--ns-primary)}' +
-    '.ns-tab .ns-tab-num{font-size:11px;opacity:.6;font-weight:600}' +
-    '.ns-tab.ns-active .ns-tab-num{color:var(--ns-primary);opacity:.8}' +
+    '.ns-tab .ns-tab-num{font-size:11px;color:#9ca3af;font-weight:600}' +
+    '.ns-tab.ns-active .ns-tab-num{color:var(--ns-primary)}' +
     '.ns-list{display:none;flex-direction:column;gap:10px;padding:12px}' +
     '.ns-list.ns-show{display:flex}' +
-    '.ns-notification{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:10px;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);position:relative;overflow:hidden;opacity:0;transform:translateX(30px);transition:all .25s cubic-bezier(.4,0,.2,1);border:1px solid rgba(0,0,0,.04)}' +
-    '.ns-notification:hover{box-shadow:0 4px 16px rgba(0,0,0,.1),0 2px 6px rgba(0,0,0,.06);transform:translateY(-1px);border-color:rgba(0,0,0,.08)}' +
+    '.ns-notification{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:10px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.05);position:relative;overflow:hidden;opacity:0;transform:translateX(20px);transition:opacity .2s cubic-bezier(.16,1,.3,1),transform .2s cubic-bezier(.16,1,.3,1),box-shadow .2s ease,border-color .2s ease;border:1px solid #e5e7eb}' +
+    '.ns-notification:hover{box-shadow:0 4px 12px rgba(16,24,40,.10);transform:translateY(-1px);border-color:#d8dee8}' +
     '.ns-notification.ns-dismissing{transform:translateX(100%);opacity:0}' +
-    '.ns-notification::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}' +
-    '.ns-notification.ns-type-info::before{background:var(--ns-primary)}.ns-notification.ns-type-info .ns-icon{color:var(--ns-primary)}' +
-    '.ns-notification.ns-type-success::before{background:var(--ns-success)}.ns-notification.ns-type-success .ns-icon{color:var(--ns-success)}' +
-    '.ns-notification.ns-type-warning::before{background:var(--ns-warn)}.ns-notification.ns-type-warning .ns-icon{color:var(--ns-warn)}' +
-    '.ns-notification.ns-type-error::before{background:var(--ns-error)}.ns-notification.ns-type-error .ns-icon{color:var(--ns-error)}' +
-    '.ns-notification.ns-emergency{box-shadow:0 2px 12px rgba(211,47,47,.2),0 1px 4px rgba(0,0,0,.06)}' +
-    '.ns-notification.ns-emergency::before{background:var(--ns-error)}' +
+    '.ns-notification.ns-type-info .ns-icon{color:var(--ns-primary)}' +
+    '.ns-notification.ns-type-success .ns-icon{color:var(--ns-success)}' +
+    '.ns-notification.ns-type-warning .ns-icon{color:var(--ns-warn)}' +
+    '.ns-notification.ns-type-error .ns-icon{color:var(--ns-error)}' +
+    '.ns-notification.ns-emergency{background:#fef2f2;border-color:#fecaca;box-shadow:0 1px 3px rgba(220,38,38,.15)}' +
     '.ns-notification.ns-emergency .ns-icon,.ns-notification.ns-emergency .ns-title{color:var(--ns-error)}' +
     '.ns-icon{flex-shrink:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;margin-top:1px}' +
     '.ns-body{flex:1;min-width:0}' +
-    '.ns-title{font-size:14px;font-weight:600;color:rgba(0,0,0,.88);margin:0;line-height:1.4;display:flex;align-items:center;flex-wrap:wrap;gap:6px}' +
-    '.ns-time{font-size:11px;color:rgba(0,0,0,.4);margin-top:6px}' +
-    '.ns-content{font-size:13px;color:rgba(0,0,0,.6);margin:6px 0 0 0;line-height:1.55;word-break:break-word}' +
-    '.ns-content code{background:rgba(0,0,0,.05);padding:2px 6px;border-radius:4px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;font-size:12px;color:var(--ns-error)}' +
-    '.ns-content strong{color:rgba(0,0,0,.88)}' +
+    '.ns-title{font-size:14px;font-weight:600;color:#111827;margin:0;line-height:1.4;display:flex;align-items:center;flex-wrap:wrap;gap:6px}' +
+    '.ns-time{font-size:11px;color:#9ca3af;margin-top:6px}' +
+    '.ns-content{font-size:13px;color:#4b5563;margin:6px 0 0 0;line-height:1.55;word-break:break-word}' +
+    '.ns-content code{background:#f3f4f6;padding:2px 6px;border-radius:6px;font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;font-size:12px;color:var(--ns-error)}' +
+    '.ns-content strong{color:#111827}' +
     '.ns-content a{color:var(--ns-primary);text-decoration:none}' +
     '.ns-content a:hover{text-decoration:underline}' +
-    '.ns-content pre{background:rgba(0,0,0,.04);padding:8px 12px;border-radius:6px;overflow-x:auto;font-size:12px;margin:6px 0}' +
-    '.ns-badge{display:inline-flex;align-items:center;font-size:10px;height:18px;padding:0 8px;border-radius:9px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}' +
-    '.ns-badge-emergency{background:linear-gradient(135deg,#ff5252,var(--ns-error));color:#fff}' +
-    '.ns-close{flex-shrink:0;width:26px;height:26px;border-radius:50%;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.3);padding:0;margin-top:-2px;transition:all .2s}' +
-    '.ns-close:hover{background:rgba(0,0,0,.06);color:rgba(0,0,0,.7)}' +
-    '.ns-close:active{background:rgba(0,0,0,.1);transform:scale(.9)}' +
-    '.ns-empty{padding:40px 20px;text-align:center;color:rgba(0,0,0,.4);font-size:13px;line-height:1.6}' +
+    '.ns-content pre{background:#f9fafb;border:1px solid #e5e7eb;padding:8px 12px;border-radius:8px;overflow-x:auto;font-size:12px;margin:6px 0}' +
+    '.ns-badge{display:inline-flex;align-items:center;font-size:10px;height:18px;padding:0 8px;border-radius:999px;font-weight:600}' +
+    '.ns-badge-emergency{background:var(--ns-error);color:#fff}' +
+    '.ns-close{flex-shrink:0;width:26px;height:26px;border-radius:8px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#9ca3af;padding:0;margin-top:-2px;transition:background-color .15s ease,color .15s ease,transform .15s ease}' +
+    '.ns-close:hover{background:#f3f4f6;color:#374151}' +
+    '.ns-close:active{background:#e5e7eb;transform:scale(.95)}' +
+    '.ns-close:focus-visible{outline:2px solid #3b82f6;outline-offset:1px}' +
+    '.ns-empty{padding:40px 20px;text-align:center;color:#9ca3af;font-size:13px;line-height:1.6}' +
     '.ns-pagination{display:flex;justify-content:center;align-items:center;gap:6px;padding:10px 0 6px;flex-wrap:wrap}' +
-    '.ns-page-btn{padding:7px 14px;border:1px solid rgba(0,0,0,.08);border-radius:20px;background:#fff;cursor:pointer;font-size:12px;font-weight:500;color:rgba(0,0,0,.6);font-family:inherit;transition:all .2s;min-width:36px;text-align:center}' +
-    '.ns-page-btn:hover{background:#f5f5f5;color:rgba(0,0,0,.8);border-color:rgba(0,0,0,.15);transform:translateY(-1px)}' +
-    '.ns-page-btn.ns-active{background:linear-gradient(135deg,#42a5f5,var(--ns-primary));color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(25,118,210,.3)}' +
+    '.ns-page-btn{padding:7px 14px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:500;color:#4b5563;font-family:inherit;transition:transform .15s ease,background-color .15s ease,color .15s ease,border-color .15s ease;min-width:36px;text-align:center}' +
+    '.ns-page-btn:hover{background:#f8fafc;color:#111827;border-color:#d1d5db;transform:translateY(-1px)}' +
+    '.ns-page-btn:active{transform:translateY(0) scale(.98)}' +
+    '.ns-page-btn:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}' +
+    '.ns-page-btn.ns-active{background:var(--ns-primary);color:#fff;border-color:var(--ns-primary);box-shadow:0 1px 2px rgba(37,99,235,.25)}' +
     '.ns-page-btn.ns-disabled{opacity:.35;cursor:default;pointer-events:none}' +
-    '.ns-lang-toggle{display:flex;align-items:center;gap:4px;border:none;background:none;cursor:pointer;color:rgba(0,0,0,.35);padding:4px 8px;font-size:11px;margin:0 auto 4px;transition:color .2s}' +
-    '.ns-lang-toggle:hover{color:rgba(0,0,0,.6)}' +
+    '.ns-lang-wrap{display:flex;justify-content:center;padding:2px 0 6px}' +
+    '.ns-lang-select{appearance:none;-webkit-appearance:none;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;color:#6b7280;cursor:pointer;font-family:inherit;font-size:11px;padding:5px 24px 5px 10px;line-height:1.4;transition:color .15s ease,border-color .15s ease;background-image:url("data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%228%22 height=%228%22 viewBox=%220 0 8 8%22><path fill=%22%239ca3af%22 d=%22M4 6L0 2h8z%22/></svg>");background-repeat:no-repeat;background-position:right 9px center}' +
+    '.ns-lang-select:hover{color:#374151;border-color:#d1d5db}' +
+    '.ns-lang-select:focus-visible{outline:2px solid #3b82f6;outline-offset:2px;border-color:var(--ns-primary)}' +
     '@keyframes nsSlideIn{to{opacity:1;transform:translateX(0)}}' +
-    '@keyframes nsPulse{0%,100%{box-shadow:0 2px 8px rgba(211,47,47,.25),0 1px 3px rgba(0,0,0,.08)}50%{box-shadow:0 4px 16px rgba(211,47,47,.4),0 2px 6px rgba(0,0,0,.12)}}' +
+    '@keyframes nsPulse{0%,100%{box-shadow:0 1px 3px rgba(220,38,38,.20)}50%{box-shadow:0 2px 8px rgba(220,38,38,.32)}}' +
     '@media (max-width:480px){' +
     '#ns-widget-root{--ns-tgl-w:40px}' +
+    '.ns-toggle{border-radius:10px}' +
     '.ns-panel{position:fixed;top:60px;right:8px;left:8px;width:auto;max-height:calc(100vh - 80px)}' +
     '.ns-tab{padding:10px 12px;font-size:12px}' +
     '.ns-notification{padding:12px 14px;gap:10px}' +
     '.ns-page-btn{padding:5px 10px;font-size:11px;min-width:28px}' +
-    '}';
+    '}' +
+    '@media (prefers-reduced-motion:reduce){#ns-widget-root *{animation-duration:.01ms!important;transition-duration:.01ms!important}}';
 
-  // ─── Init ──────────────────────────────────────────────
+  // 运行时状态与本地缓存
   var PAGE = 5;
   var dismissed = {};
   try { dismissed = JSON.parse(localStorage.getItem('ns-dismissed') || '{}'); } catch (e) {}
@@ -138,13 +228,10 @@
   var tab = 'unread', readPage = 0, unreadPage = 0;
   var currentData = [], lastDataIds = '';
   var readEl, unreadEl, tabsEl;
-  var wLang = 'zh-CN', wStr;
 
   function mergeConfig(config) {
     cfg = {};
     Object.keys(DEF).forEach(function(k) { cfg[k] = (config[k] !== undefined) ? config[k] : DEF[k]; });
-    wLang = detectLang(cfg.language);
-    wStr = wLang === 'en' ? W_STR.en : W_STR.zh_CN;
     if (!cfg.soundEnabled) playDing = function(){};
   }
 
@@ -217,7 +304,7 @@
   }
 
   function initUI(config) {
-    mergeConfig(config || {});
+    // 注意：mergeConfig 已在 bootstrap 中完成（此时语言探测也已就绪）
 
     var style = document.createElement('style');
     style.textContent = CSS;
@@ -225,7 +312,7 @@
 
     root = document.createElement('div');
     root.id = 'ns-widget-root';
-    root.innerHTML = '<button class="ns-toggle" title="Notifications">' + ICONS.bell + '<span class="ns-badge-count" style="display:none">0</span></button><div class="ns-panel"></div>';
+    root.innerHTML = '<button class="ns-toggle" title="' + esc(wStr.bellTitle) + '">' + ICONS.bell + '<span class="ns-badge-count" style="display:none">0</span></button><div class="ns-panel"></div>';
     if (SCRIPT && SCRIPT.parentNode) {
       SCRIPT.parentNode.insertBefore(root, SCRIPT.nextSibling);
     } else {
@@ -255,7 +342,7 @@
     setInterval(load, 5000);
   }
 
-  // ─── Render ────────────────────────────────────────────
+  // 渲染
   function collectRead(notifications) {
     var list = notifications.filter(function (n) { return dismissed[n.id]; });
     readCache.forEach(function (r) {
@@ -305,8 +392,13 @@
     }
     h += '</div>';
 
-    // Language toggle
-    h += '<button class="ns-lang-toggle" id="ns-lang-btn">' + ICONS.globe + '<span>' + (wLang === 'en' ? '中文' : 'English') + '</span></button>';
+    // Language switcher (all configured locales)
+    h += '<div class="ns-lang-wrap"><select class="ns-lang-select" id="ns-lang-select" aria-label="Language">' +
+      i18nConfig.locales.map(function (l) {
+        var label = (i18nCache[wLang] && i18nCache[wLang]['lang.' + l.code]) || l.name;
+        return '<option value="' + l.code + '"' + (l.code === wLang ? ' selected' : '') + '>' + esc(label) + '</option>';
+      }).join('') +
+      '</select></div>';
 
     panel.innerHTML = h;
 
@@ -324,22 +416,24 @@
     }
     bindPagination(readEl, 'read');
     bindPagination(unreadEl, 'unread');
-    document.getElementById('ns-lang-btn').onclick = function(e) {
-      e.stopPropagation();
-      wLang = wLang === 'en' ? 'zh-CN' : 'en';
-      localStorage.setItem('ns_widget_lang', wLang);
-      wStr = wLang === 'en' ? W_STR.en : W_STR.zh_CN;
-      fullRender(false);
-    };
+    var langSelect = document.getElementById('ns-lang-select');
+    if (langSelect) {
+      langSelect.onclick = function (e) { e.stopPropagation(); };
+      langSelect.onchange = function (e) {
+        e.stopPropagation();
+        var code = this.value;
+        try { localStorage.setItem('ns_widget_lang', code); } catch (err) {}
+        loadLangStrings(code).then(function () { fullRender(false); });
+      };
+    }
   }
 
-  // ─── Card / Pagination / Tab / Dismiss (unchanged logic) ──
+  // 单条通知卡片（read=true 已读，refresh=true 重渲染不播放入场动画）
   function card(n, i, read, refresh) {
     var anim = '';
     if (cfg.animationEnabled && !refresh) {
-      anim = 'animation-duration:.35s;animation-fill-mode:forwards;animation-name:nsSlideIn;animation-delay:' + (i * 0.04) + 's';
+      anim = 'animation-duration:.2s;animation-fill-mode:forwards;animation-name:nsSlideIn;animation-delay:' + Math.min(i * 0.03, 0.15) + 's';
     } else {
-      // 无动画时直接可见，避免卡在 opacity:0
       anim = 'opacity:1;transform:none';
     }
     return '<div class="ns-notification ns-type-' + n.type + (n.is_emergency ? ' ns-emergency' : '') + '" ' +
@@ -563,13 +657,29 @@
     } catch(e) { setTimeout(connectSSE, 5000); }
   }
 
-  // ─── Start ──
+  // 启动：先取小部件配置与 i18n 配置/语言包再渲染 UI，任一失败均降级到内置兜底
+  function bootstrap(config) {
+    mergeConfig(config || {});
+    resolveUserId().then(function () {
+      return fetchJson(API_HOST + '/api/i18n/config');
+    }).then(function (cfg) {
+      if (cfg && cfg.locales && cfg.locales.length) i18nConfig = cfg;
+      if (!i18nConfig.default) i18nConfig.default = I18N_FALLBACK_CONFIG.default;
+      wLang = detectLang(config && config.language);
+      return loadLangStrings(wLang);
+    }).then(function () {
+      initUI(config);
+    }).catch(function () {
+      initUI(config);
+    });
+  }
+
   try {
     fetchConfig(function(config) {
-      try { initUI(config); } catch (e) { initUI(null); }
+      try { bootstrap(config); } catch (e) { bootstrap(null); }
     });
   } catch (e) {
-    initUI(null);
+    bootstrap(null);
   }
 
 })();

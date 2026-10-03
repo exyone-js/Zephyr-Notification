@@ -1,0 +1,11 @@
+{
+  "default": "zh-CN",
+  "locales": [
+    { "code": "zh-CN", "name": "简体中文", "file": "zh-CN.json" },
+    { "code": "en-US", "name": "English", "file": "en-US.json" },
+    { "code": "ja-JP", "name": "日本語", "file": "ja-JP.json" },
+    { "code": "ko-KR", "name": "한국어", "file": "ko-KR.json" },
+    { "code": "fr-FR", "name": "Français", "file": "fr-FR.json" },
+    { "code": "de-DE", "name": "Deutsch", "file": "de-DE.json" }
+  ]
+}

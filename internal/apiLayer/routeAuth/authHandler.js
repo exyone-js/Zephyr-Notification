@@ -50,22 +50,35 @@ function createAuthRouter(authService) {
     res.json({ success: true, data: user });
   });
 
+  // ── i18n 语言配置（支持的语言列表）──
+  router.get('/i18n/config', (req, res) => {
+    const configPath = path.join(__dirname, '..', '..', '..', 'locales', 'config.json');
+    try {
+      res.type('application/json').send(fs.readFileSync(configPath, 'utf8'));
+    } catch {
+      res.json({ default: 'zh-CN', locales: [] });
+    }
+  });
+
   // ── i18n 语言文件 ──
   router.get('/i18n/:locale.json', (req, res) => {
     const { locale } = req.params;
+    // 防止路径穿越：语言代码只允许字母、数字、连字符
+    if (!/^[A-Za-z0-9-]+$/.test(locale)) {
+      return res.status(400).json({});
+    }
     const localesDir = path.join(__dirname, '..', '..', '..', 'locales');
     const filePath = path.join(localesDir, `${locale}.json`);
 
     try {
       if (!fs.existsSync(filePath)) {
-        // 回退到中文
+        // 回退到默认语言
         const fallbackPath = path.join(localesDir, 'zh-CN.json');
         const data = fs.readFileSync(fallbackPath, 'utf8');
-        res.json(JSON.parse(data));
+        res.type('application/json').send(data);
         return;
       }
-      const data = fs.readFileSync(filePath, 'utf8');
-      res.json(JSON.parse(data));
+      res.type('application/json').send(fs.readFileSync(filePath, 'utf8'));
     } catch {
       res.json({});
     }

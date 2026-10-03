@@ -1,59 +1,196 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-locale="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>风铃通知 · 通知预览</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f5f5; min-height: 100vh; }
-    .preview-header { background: #fff; padding: 16px 24px; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center; }
-    .preview-header h1 { font-size: 18px; color: #1a1a1a; }
-    .preview-header a { color: #1677ff; text-decoration: none; font-size: 14px; }
-    .preview-header a:hover { text-decoration: underline; }
-    .preview-main { max-width: 800px; margin: 40px auto; padding: 0 20px; }
-    .mock-site { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-    .mock-site h2 { font-size: 20px; margin-bottom: 12px; color: #333; }
-    .mock-site p { color: #666; margin-bottom: 24px; line-height: 1.8; }
-    .widget-area { background: #fafafa; border: 1px dashed #d9d9d9; border-radius: 8px; padding: 20px; margin-top: 16px; }
-    .widget-area-label { font-size: 12px; color: #999; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
-    .preview-footer { text-align:center; padding:20px 0 10px; color:#999; font-size:12px; }
-    .preview-footer a { color:#999; text-decoration:none; }
-    @media (max-width: 640px) { .preview-main { margin: 20px auto; padding: 0 12px; } }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="preview.title">风铃通知 · 通知预览</title>
+<style>
+/* Corporate Clean 设计令牌（企业简洁风） */
+:root{
+  --c-primary:#2563eb; --c-primary-hover:#1d4ed8; --c-ring:#3b82f6;
+  --c-bg:#f8fafc; --c-card:#fff; --c-input:#f9fafb;
+  --c-border:#e5e7eb; --c-border-strong:#d1d5db;
+  --t1:#111827; --t2:#374151; --t3:#6b7280; --t4:#9ca3af;
+  --r-lg:8px; --r-xl:12px;
+  --sh-sm:0 1px 2px rgba(16,24,40,.05);
+  --sh-md:0 4px 12px rgba(16,24,40,.10);
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans","Noto Sans SC","Microsoft YaHei",sans-serif;background:var(--c-bg);color:var(--t2);line-height:1.6;font-size:14px;min-height:100vh}
+a{color:var(--c-primary);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* 顶部导航 */
+.preview-header{background:var(--c-card);border-bottom:1px solid var(--c-border);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.preview-header h1{font-size:18px;font-weight:600;letter-spacing:-.01em;color:var(--t1)}
+.header-right{display:flex;align-items:center;gap:14px}
+.lang-switcher{background:#fff;border:1px solid var(--c-border-strong);border-radius:var(--r-lg);padding:7px 10px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;color:var(--t2)}
+.lang-switcher:focus-visible{outline:2px solid var(--c-ring);outline-offset:2px}
+.preview-header a{color:var(--c-primary);font-size:13px;font-weight:500}
+
+/* 主内容卡片 */
+.preview-main{max-width:800px;margin:40px auto;padding:0 20px}
+.mock-site{background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--r-xl);box-shadow:var(--sh-sm);padding:28px}
+.mock-site h2{font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--t1);margin-bottom:10px}
+.mock-site > p{color:var(--t3);line-height:1.75}
+
+/* 嵌入区域：虚线容器，不使用单侧色条 */
+.widget-area{background:var(--c-input);border:1px dashed var(--c-border-strong);border-radius:var(--r-lg);padding:22px;margin-top:20px}
+.widget-area-label{font-size:12px;color:var(--t3);margin-bottom:14px;font-weight:600}
+.mock-note{margin-top:20px;color:var(--t3);line-height:1.7}
+
+/* 页脚 */
+.preview-footer{text-align:center;padding:20px 0 12px;color:var(--t4);font-size:12px}
+.preview-footer a{color:var(--t4)}
+.preview-footer a:hover{color:var(--t3)}
+
+@media (max-width:640px){
+  .preview-main{margin:20px auto;padding:0 12px}
+  .mock-site{padding:20px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
 </head>
 <body>
-  <div class="preview-header">
-    <h1>通知组件预览</h1>
-    <a href="admin.html" data-i18n="nav.preview">返回后台</a>
-  </div>
 
-  <div class="preview-main">
+  <header class="preview-header">
+    <h1 data-i18n="preview.heading">通知组件预览</h1>
+    <div class="header-right">
+      <select class="lang-switcher" aria-label="Language"></select>
+      <a href="admin.html" data-i18n="preview.backAdmin">返回后台</a>
+    </div>
+  </header>
+
+  <main class="preview-main">
     <div class="mock-site">
-      <h2>示例网站页面</h2>
-      <p>模拟你网站页面的内容。下方是通知组件嵌入后的效果，通知数据来自 API，30 秒自动刷新一次。</p>
+      <h2 data-i18n="preview.mockTitle">示例网站页面</h2>
+      <p data-i18n="preview.mockDesc">模拟你网站页面的内容。下方是通知组件嵌入后的效果，通知数据来自 API，定期自动刷新。</p>
 
       <div class="widget-area">
-        <div class="widget-area-label">通知组件嵌入区域</div>
-        <script>
-          (function () {
-            var me = document.currentScript, src = 'widget.js';
-            fetch('/api/auth/me').then(function (r) { return r.json(); }).then(function (d) {
-              if (d.success && d.data) src += '?u=' + d.data.id;
-            }).catch(function () {}).finally(function () {
-              var s = document.createElement('script'); s.src = src;
-              me.parentNode.insertBefore(s, me.nextSibling);
-            });
-          })();
-        </script>
+        <div class="widget-area-label" data-i18n="preview.embedArea">通知组件嵌入区域</div>
+        <!-- 静态嵌入组件（与生成的 embed code 一致；登录用户 id 由 widget.js 同源自动探测） -->
+        <script src="widget.js"></script>
       </div>
 
-      <p style="margin-top:20px;">可在后台管理页面添加、编辑、启停通知，此处会自动更新。</p>
+      <p class="mock-note" data-i18n="preview.note">可在后台管理页面添加、编辑、启停通知，此处会自动更新。</p>
     </div>
-  </div>
+  </main>
 
-  <div class="preview-footer">
-    Powered By <a href="https://github.com/govmoe/Zephyr-Notification">002.HK and EXYON.EE</a> <span>v1.4</span>
-  </div>
+  <footer class="preview-footer">
+    <span data-i18n="app.footer">Powered By</span> <a href="https://github.com/govmoe/Zephyr-Notification">002.HK and EXYON.EE</a> <span id="footerVersion"></span>
+  </footer>
+
+<script>
+// NsI18n 精简内联模块（预览页仅需 init/t/DOM 应用/下拉切换）
+(function (global) {
+  'use strict';
+  var FALLBACK_CONFIG = { default: 'zh-CN', locales: [
+    { code: 'zh-CN', name: '简体中文' }, { code: 'en-US', name: 'English' },
+    { code: 'ja-JP', name: '日本語' }, { code: 'ko-KR', name: '한국어' },
+    { code: 'fr-FR', name: 'Français' }, { code: 'de-DE', name: 'Deutsch' }
+  ]};
+  function I18n(options) {
+    options = options || {};
+    this.baseUrl = options.baseUrl || '';
+    this.storageKey = options.storageKey || 'ns_locale';
+    this.config = FALLBACK_CONFIG; this.locale = FALLBACK_CONFIG.default; this.strings = {}; this._listeners = [];
+    if (typeof options.onLocaleChange === 'function') this._listeners.push(options.onLocaleChange);
+  }
+  I18n.prototype = {
+    async init(preferred) {
+      await this.loadConfig();
+      var resolved = this.resolveLocale(preferred !== undefined ? preferred : this.readSaved());
+      await this.load(resolved, { save: false });
+      return this;
+    },
+    async loadConfig() {
+      try {
+        var res = await fetch(this.baseUrl + '/api/i18n/config');
+        if (res.ok) { var cfg = await res.json(); if (cfg && Array.isArray(cfg.locales) && cfg.locales.length) this.config = cfg; }
+      } catch (e) {}
+      if (!this.config.default) this.config.default = FALLBACK_CONFIG.default;
+    },
+    async load(locale, opts) {
+      opts = opts || {};
+      var strings = await this.fetchStrings(locale);
+      var actual = locale;
+      if (!strings) { strings = await this.fetchStrings(this.config.default) || {}; actual = this.config.default; }
+      this.strings = strings; this.locale = actual;
+      if (opts.save !== false) this.writeSaved(actual);
+      this.applyDOM(); this.populateSwitchers();
+      this._listeners.forEach(fn => { try { fn(actual, strings); } catch (e) {} });
+      return this;
+    },
+    async fetchStrings(locale) {
+      try {
+        var res = await fetch(this.baseUrl + '/api/i18n/' + encodeURIComponent(locale) + '.json');
+        if (!res.ok) return null;
+        var data = await res.json();
+        return data && Object.keys(data).length ? data : null;
+      } catch (e) { return null; }
+    },
+    get available() { return this.config.locales.map(l => l.code); },
+    isValid(code) { return this.available.indexOf(code) > -1; },
+    resolveLocale(preferred) {
+      if (preferred && this.isValid(preferred)) return preferred;
+      var saved = this.readSaved();
+      if (saved && this.isValid(saved)) return saved;
+      var browserLangs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || navigator.userLanguage || ''];
+      for (var i = 0; i < browserLangs.length; i++) {
+        var tag = String(browserLangs[i] || '').toLowerCase();
+        if (!tag) continue;
+        var exact = this.available.filter(c => c.toLowerCase() === tag)[0];
+        if (exact) return exact;
+        var primary = tag.split('-')[0];
+        var prefix = this.available.filter(c => c.toLowerCase().split('-')[0] === primary)[0];
+        if (prefix) return prefix;
+      }
+      return this.config.default;
+    },
+    readSaved() { try { return localStorage.getItem(this.storageKey); } catch (e) { return null; } },
+    writeSaved(locale) { try { localStorage.setItem(this.storageKey, locale); } catch (e) {} },
+    t(key, params) {
+      var val = this.strings[key];
+      if (val === undefined) return typeof params === 'string' ? params : key;
+      if (params && typeof params === 'object') val = val.replace(/\{(\w+)\}/g, (m, name) => params[name] !== undefined && params[name] !== null ? String(params[name]) : m);
+      return val;
+    },
+    applyDOM(root) {
+      var scope = root || document;
+      document.documentElement.lang = this.locale;
+      document.documentElement.dataset.locale = this.locale;
+      scope.querySelectorAll('[data-i18n]').forEach(el => { var key = el.getAttribute('data-i18n'); if (key) el.innerHTML = this.t(key, el.innerHTML); });
+      scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => { var key = el.getAttribute('data-i18n-placeholder'); if (key) el.placeholder = this.t(key, el.placeholder); });
+      scope.querySelectorAll('[data-i18n-title]').forEach(el => { var key = el.getAttribute('data-i18n-title'); if (key) el.title = this.t(key, el.title); });
+      scope.querySelectorAll('.lang-switcher').forEach(sel => { sel.value = this.locale; });
+    },
+    populateSwitchers(root) {
+      var self = this;
+      (root || document).querySelectorAll('.lang-switcher').forEach(sel => {
+        if (sel.dataset.nsI18nBound !== '1') {
+          sel.addEventListener('change', () => self.load(sel.value));
+          sel.dataset.nsI18nBound = '1';
+        }
+        sel.innerHTML = self.config.locales.map(l => '<option value="' + l.code + '">' + self.t('lang.' + l.code, l.name) + '</option>').join('');
+        sel.value = self.locale;
+      });
+    }
+  };
+  global.NsI18n = { create: options => new I18n(options) };
+})(typeof window !== 'undefined' ? window : this);
+</script>
+
+<script>
+// 初始化语言与页脚版本号
+NsI18n.create({ storageKey: 'ns_locale' }).init();
+fetch('/api/version').then(function (r) { return r.json(); }).then(function (res) {
+  if (res && res.success && res.data && res.data.version) {
+    document.getElementById('footerVersion').textContent = 'v' + res.data.version;
+  }
+}).catch(function () {});
+</script>
 </body>
 </html>

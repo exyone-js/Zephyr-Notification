@@ -6,10 +6,12 @@
 const crypto = require('crypto');
 const NotifyEntity = require('../../domainCond/notifyModel/notifyEntity');
 
+/**
+ * 生成 UTC 时间字符串（YYYY-MM-DD HH:mm:ss）。
+ * 不再使用 setHours(+8) 伪造时区——显示端负责本地化。
+ */
 function now() {
-  const d = new Date();
-  d.setHours(d.getHours() + 8);
-  return d.toISOString().replace('T', ' ').slice(0, 19);
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
 class NotifyService {

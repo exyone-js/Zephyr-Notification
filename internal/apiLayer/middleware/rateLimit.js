@@ -12,7 +12,7 @@ function rateLimit(req, res, next) {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
     const count = (rateLimitMap.get(ip) || 0) + 1;
     if (count > 100) {
-      return res.status(429).json({ success: false, message: '请求过于频繁' });
+      return res.status(429).json({ success: false, code: 'api.tooManyRequests', message: 'Too many requests' });
     }
     rateLimitMap.set(ip, count);
   }

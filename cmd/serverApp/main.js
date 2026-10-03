@@ -14,6 +14,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.e
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 
@@ -104,6 +105,13 @@ app.get('/auth/:provider/callback', async (req, res) => {
   } catch (e) { res.redirect('/admin.html?error=auth_failed'); }
 });
 
+// 版本信息（公开，供前端页脚显示，消除硬编码版本号）
+let APP_VERSION = '';
+try {
+  APP_VERSION = fs.readFileSync(path.join(__dirname, '..', '..', 'VERSION'), 'utf8').trim();
+} catch (e) { APP_VERSION = ''; }
+app.get('/api/version', (req, res) => res.json({ success: true, data: { version: APP_VERSION } }));
+
 // API 路由
 app.use('/api', createAuthRouter(authService));
 app.use('/api', createNotifyRouter(notifyService, JWT_SECRET));
@@ -123,7 +131,8 @@ app.get('/widget.js', (req, res) => {
   });
 });
 
-app.get('/', (req, res) => res.redirect('/admin.html'));
+// 根路径返回入口页（静态中间件本身也会处理 /，这里显式兜底）
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', '..', 'public', 'index.html')));
 
 // ========== 启动 ==========
 app.listen(PORT, () => {

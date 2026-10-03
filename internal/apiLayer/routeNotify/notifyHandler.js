@@ -55,13 +55,13 @@ function createNotifyRouter(notifyService, jwtSecret) {
   // 管理接口（需要登录）
   router.get('/notifications/:id', guard, async (req, res) => {
     const item = await notifyService.getById(req.user.id, req.params.id);
-    if (!item) return res.status(404).json(NotifyDto.error('通知不存在'));
+    if (!item) return res.status(404).json(NotifyDto.error('api.notificationNotFound', 'Notification not found'));
     res.json(NotifyDto.success(item));
   });
 
   router.post('/notifications', guard, async (req, res) => {
     const result = NotifyDto.validateCreate(req.body);
-    if (!result.valid) return res.status(400).json(NotifyDto.error(result.message));
+    if (!result.valid) return res.status(400).json(NotifyDto.error(result.code, result.message));
 
     const item = await notifyService.create(req.user.id, result.data);
     res.status(201).json(NotifyDto.success(item));
@@ -69,22 +69,22 @@ function createNotifyRouter(notifyService, jwtSecret) {
 
   router.put('/notifications/:id', guard, async (req, res) => {
     const result = NotifyDto.validateUpdate(req.body);
-    if (!result.valid) return res.status(400).json(NotifyDto.error(result.message));
+    if (!result.valid) return res.status(400).json(NotifyDto.error(result.code, result.message));
 
     const item = await notifyService.update(req.user.id, req.params.id, result.fields);
-    if (!item) return res.status(404).json(NotifyDto.error('通知不存在'));
+    if (!item) return res.status(404).json(NotifyDto.error('api.notificationNotFound', 'Notification not found'));
     res.json(NotifyDto.success(item));
   });
 
   router.delete('/notifications/:id', guard, async (req, res) => {
     const ok = await notifyService.delete(req.user.id, req.params.id);
-    if (!ok) return res.status(404).json(NotifyDto.error('通知不存在'));
-    res.json(NotifyDto.message('删除成功'));
+    if (!ok) return res.status(404).json(NotifyDto.error('api.notificationNotFound', 'Notification not found'));
+    res.json(NotifyDto.message('api.deleteSuccess'));
   });
 
   router.post('/notifications/clear-all', guard, async (req, res) => {
     await notifyService.deleteAll(req.user.id);
-    res.json(NotifyDto.message('已清空所有通知'));
+    res.json(NotifyDto.message('api.clearedAll'));
   });
 
   // 获取嵌入代码

@@ -22,18 +22,13 @@
   status = 200
 
 [[redirects]]
+  from = "/index.html"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
   from = "/admin.html"
   to = "/admin.html"
-  status = 200
-
-[[redirects]]
-  from = "/admin.js"
-  to = "/admin.js"
-  status = 200
-
-[[redirects]]
-  from = "/admin.css"
-  to = "/admin.css"
   status = 200
 
 [[redirects]]
@@ -43,8 +38,8 @@
 
 [[redirects]]
   from = "/"
-  to = "/admin.html"
-  status = 302
+  to = "/index.html"
+  status = 200
 
 [dev]
   command = "node cmd/serverApp/main.js"
