@@ -1,4 +1,4 @@
-name = "notify"
+name = "zephyr-notify"
 main = "worker.js"
 workers_dev = true
 preview_urls = true
