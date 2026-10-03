@@ -11,7 +11,7 @@ function authGuard(jwtSecret) {
   return (req, res, next) => {
     const token = req.cookies?.ns_token;
     if (!token) {
-      return res.status(401).json({ success: false, message: '请先登录' });
+      return res.status(401).json({ success: false, code: 'api.unauthorized', message: 'Unauthorized' });
     }
 
     try {
@@ -21,7 +21,7 @@ function authGuard(jwtSecret) {
       next();
     } catch (e) {
       res.clearCookie('ns_token', { path: '/' });
-      return res.status(401).json({ success: false, message: '登录已过期，请重新登录' });
+      return res.status(401).json({ success: false, code: 'api.sessionExpired', message: 'Session expired' });
     }
   };
 }

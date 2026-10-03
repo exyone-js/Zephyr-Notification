@@ -52,10 +52,10 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   const pathname = req.path;
-  if (pathname === '/admin.html' || pathname === '/admin.js' || pathname.startsWith('/api/')) {
+  if (pathname === '/' || pathname === '/index.html' || pathname === '/admin.html' || pathname === '/preview.html' || pathname.startsWith('/api/')) {
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     );
   }
   next();

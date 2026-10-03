@@ -85,14 +85,15 @@ class NotifyEntity {
 
   /**
    * 校验通知数据有效性
-   * @returns {string|null} 错误消息，无错误返回 null
+   * @returns {string|null} 稳定错误码（api.xxx），无错误返回 null；
+   *                        由 DTO/路由层负责面向用户的本地化文案。
    */
   static validate(data) {
-    if (!data.title || typeof data.title !== 'string') return '标题不能为空';
-    if (data.title.length > 200) return '标题过长（最多200字）';
-    if (data.content && typeof data.content !== 'string') return '内容格式错误';
-    if (data.content && data.content.length > 10000) return '内容过长（最多10000字）';
-    if (data.type && !['info', 'success', 'warning', 'error'].includes(data.type)) return '无效的通知类型';
+    if (!data.title || typeof data.title !== 'string') return 'api.titleRequired';
+    if (data.title.length > 200) return 'api.titleTooLong';
+    if (data.content && typeof data.content !== 'string') return 'api.contentInvalid';
+    if (data.content && data.content.length > 10000) return 'api.contentTooLong';
+    if (data.type && !['info', 'success', 'warning', 'error'].includes(data.type)) return 'api.typeInvalid';
     return null;
   }
 }

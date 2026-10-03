@@ -24,8 +24,8 @@ const DEFAULTS = {
   animationEnabled: true,
   // 通知声音
   soundEnabled: true,
-  // 语言
-  language: 'auto',  // auto | zh-CN | en
+  // 语言（auto 或 locales/config.json 中注册的任一语言代码）
+  language: 'auto',  // auto | zh-CN | en-US | ja-JP | ko-KR | fr-FR | de-DE
   // 圆角
   borderRadius: 12,
   // 主题色（通知条左侧色条等）

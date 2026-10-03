@@ -1,4 +1,4 @@
-﻿# notice-hub · 风铃通知
+# notice-hub · 风铃通知
 
 在线通知管理系统，支持**密码登录**与 **OAuth2 认证**，可嵌入任意前端网站。
 
@@ -49,8 +49,8 @@ npm start
 notice-hub/
 ├── cmd/                       # 程序入口（各平台）
 │   ├── serverApp/             # Express 服务器
-│   ├── worker-cf/             # Cloudflare Workers
-│   ├── worker-eo/             # 腾讯云 EdgeOne
+│   ├── workerCf/              # Cloudflare Workers
+│   ├── workerEo/              # 腾讯云 EdgeOne
 │   └── serverNet/             # Netlify Functions
 ├── internal/
 │   ├── apiLayer/              # HTTP 接口层
@@ -72,9 +72,13 @@ notice-hub/
 │   ├── oauth2Mgr/             # OAuth2 管理器
 │   └── oauth2Github/          # GitHub OAuth2 实现
 ├── locales/                   # i18n 语言文件
-├── public/                    # 前端静态资源
-│   ├── admin.html/admin.js/admin.css  # 管理后台
-│   └── widget.js/widget.css           # 嵌入组件
+│   ├── config.json            #   语言注册表（支持语言列表/默认语言）
+│   └── zh-CN/en-US/ja-JP/ko-KR/fr-FR/de-DE.json
+├── public/                    # 前端静态资源（样式/脚本均已内联）
+│   ├── index.html             #   入口页
+│   ├── admin.html             #   管理后台（内联 CSS/JS/i18n）
+│   ├── preview.html           #   组件预览页（内联 i18n）
+│   └── widget.js              #   嵌入组件
 ├── scripts/                   # 构建脚本
 ├── configs/                   # 配置模板
 └── docs/                      # 设计文档
@@ -186,7 +190,19 @@ node scripts/buildEdgeOne.js
 | `GET /api/notifications/active` | 否 | 获取公共活跃通知 |
 | `GET /api/notifications/emergency` | 否 | 获取公共紧急通知 |
 | `GET /api/notifications/stream` | 否 | SSE 实时推送 |
-| `GET /api/i18n/:locale.json` | 否 | 获取语言文件 |
+| `GET /api/version` | 否 | 获取应用版本号（前端页脚动态显示） |
+| `GET /api/i18n/config` | 否 | 获取语言注册表（默认语言 + 支持的语言列表） |
+| `GET /api/i18n/:locale.json` | 否 | 获取语言文件（未知语言回退到默认语言） |
+
+---
+
+## 国际化 (i18n)
+
+- 内置语言：简体中文 `zh-CN`、English `en-US`、日本語 `ja-JP`、한국어 `ko-KR`、Français `fr-FR`、Deutsch `de-DE`
+- 语言注册表：`locales/config.json`，新增语言时只需在表中登记并添加同名语言文件
+- 管理后台：右上角/登录页下拉切换，选择保存在 `localStorage`
+- 嵌入小部件：面板底部下拉切换；后台「小铃铛语言」可设置访客默认语言（`auto` 时按浏览器语言自动匹配，访客手动切换优先）
+- 语言探测顺序：手动指定 > 本地存储 > 浏览器语言（精确 → 主语言标签回退）> 默认语言
 
 ---
 

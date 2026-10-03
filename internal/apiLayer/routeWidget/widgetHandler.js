@@ -20,15 +20,15 @@ function createWidgetRouter(widgetRepo, jwtSecret) {
   router.put('/widget-config', guard, (req, res) => {
     const result = widgetRepo.saveConfig(req.body);
     if (!result.success) {
-      return res.status(400).json({ success: false, message: '配置校验失败', errors: result.errors });
+      return res.status(400).json({ success: false, code: 'api.configInvalid', message: 'Invalid configuration', errors: result.errors });
     }
-    res.json({ success: true, message: '配置已保存' });
+    res.json({ success: true, code: 'api.configSaved', message: 'Settings saved', data: widgetRepo.getConfig() });
   });
 
   // ── 重置 widget 配置（需登录） ──
   router.post('/widget-config/reset', guard, (req, res) => {
     widgetRepo.resetConfig();
-    res.json({ success: true, message: '已重置为默认配置' });
+    res.json({ success: true, code: 'api.configReset', message: 'Reset to defaults', data: widgetRepo.getConfig() });
   });
 
   return router;

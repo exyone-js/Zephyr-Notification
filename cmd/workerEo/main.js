@@ -12,10 +12,14 @@
 
 // ---- 内联静态文件（构建时替换）----
 const WIDGET_JS = `__WIDGET_JS__`;
+const INDEX_HTML = `__INDEX_HTML__`;
 const ADMIN_HTML = `__ADMIN_HTML__`;
-const ADMIN_CSS = `__ADMIN_CSS__`;
-const ADMIN_JS = `__ADMIN_JS__`;
 const PREVIEW_HTML = `__PREVIEW_HTML__`;
+// i18n：语言注册表与全部语言包（构建脚本按 locales/config.json 注入）
+const I18N_CONFIG = JSON.parse(`__I18N_CONFIG__`);
+const I18N_LOCALES = JSON.parse(`__I18N_LOCALES__`);
+// 应用版本（构建脚本读取 VERSION 文件注入）
+const APP_VERSION = `__APP_VERSION__`;
 
 // ---- JWT ----
 const b64u = s => btoa(s).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
@@ -57,7 +61,7 @@ function createStore(env) {
   };
 }
 
-function now() { const d = new Date(); d.setHours(d.getHours() + 8); return d.toISOString().replace('T', ' ').slice(0, 19); }
+function now() { return new Date().toISOString().replace('T', ' ').slice(0, 19); }
 
 // ---- OAuth2 Providers ----
 function createProviders(env, baseUrl) {
@@ -102,17 +106,25 @@ async function handleRequest(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { headers: sh });
 
   // CSP
-  if (path === '/admin.html' || path.startsWith('/admin.') || path.startsWith('/api/')) {
-    sh['Content-Security-Policy'] = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
+  if (path === '/' || path === '/index.html' || path === '/admin.html' || path === '/preview.html' || path.startsWith('/api/')) {
+    sh['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'";
   }
 
-  // 静态文件
-  if (path === '/widget.js') return new Response(WIDGET_JS, { headers: { ...sh, 'Content-Type': 'application/javascript; charset=utf-8' } });
+  // 静态文件（CSS/JS 已全部内联到 HTML，仅保留 4 个入口）
+  if (path === '/widget.js') return new Response(WIDGET_JS, { headers: { ...sh, 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } });
+  if (path === '/index.html') return new Response(INDEX_HTML, { headers: { ...sh, 'Content-Type': 'text/html; charset=utf-8' } });
   if (path === '/admin.html') return new Response(ADMIN_HTML, { headers: { ...sh, 'Content-Type': 'text/html; charset=utf-8' } });
-  if (path === '/admin.css') return new Response(ADMIN_CSS, { headers: { ...sh, 'Content-Type': 'text/css; charset=utf-8' } });
-  if (path === '/admin.js') return new Response(ADMIN_JS, { headers: { ...sh, 'Content-Type': 'application/javascript; charset=utf-8' } });
   if (path === '/preview.html') return new Response(PREVIEW_HTML, { headers: { ...sh, 'Content-Type': 'text/html; charset=utf-8' } });
-  if (path === '/' || path === '') return Response.redirect(`${baseUrl}/admin.html`, 302);
+  if (path === '/' || path === '') return new Response(INDEX_HTML, { headers: { ...sh, 'Content-Type': 'text/html; charset=utf-8' } });
+
+  // i18n 国际化：语言注册表 + 任意已注册语言包（未知语言回退到默认语言）
+  if (path === '/api/i18n/config') return new Response(JSON.stringify(I18N_CONFIG), { headers: { ...sh, 'Content-Type': 'application/json; charset=utf-8' } });
+  const i18nM = path.match(/^\/api\/i18n\/([A-Za-z0-9-]+)(\.json)?$/);
+  if (i18nM) {
+    if (i18nM[1] === 'config') return new Response(JSON.stringify(I18N_CONFIG), { headers: { ...sh, 'Content-Type': 'application/json; charset=utf-8' } });
+    const data = I18N_LOCALES[i18nM[1]] || I18N_LOCALES[I18N_CONFIG.default] || '{}';
+    return new Response(data, { headers: { ...sh, 'Content-Type': 'application/json; charset=utf-8' } });
+  }
 
   // 认证
   const providers = createProviders(env, baseUrl);
@@ -160,7 +172,7 @@ async function handleRequest(request, env) {
   if (tm) currentUser = await verifyJWT(tm[1], JWT_SECRET);
 
   function auth() {
-    if (!currentUser?.id) return new Response(JSON.stringify({ success: false, message: '请先登录' }), { status: 401, headers: { ...sh, 'Content-Type': 'application/json' } });
+    if (!currentUser?.id) return new Response(JSON.stringify({ success: false, code: 'api.unauthorized', message: 'Unauthorized' }), { status: 401, headers: { ...sh, 'Content-Type': 'application/json' } });
     return null;
   }
 
@@ -192,14 +204,23 @@ async function handleRequest(request, env) {
       return new Response(JSON.stringify({ success: true, data: d.filter(n => n.is_active) }), { headers: { ...sh, 'Content-Type': 'application/json' } });
     }
     if (path === '/api/notifications/emergency') return new Response(JSON.stringify({ success: true, data: [] }), { headers: { ...sh, 'Content-Type': 'application/json' } });
-    if (path === '/api/notifications/stream') return new Response(JSON.stringify({ success: true, message: 'EdgeOne 不支持 SSE' }), { headers: { ...sh, 'Content-Type': 'application/json' } });
+    if (path === '/api/notifications/stream') return new Response(JSON.stringify({ success: false, code: 'api.serverError', message: 'SSE not supported on EdgeOne' }), { status: 501, headers: { ...sh, 'Content-Type': 'application/json' } });
+    if (path === '/api/version') return new Response(JSON.stringify({ success: true, data: { version: APP_VERSION } }), { headers: { ...sh, 'Content-Type': 'application/json' } });
+
+    // Widget 配置（EdgeOne 无持久 KV 时存于模块内存）
+    if (path === '/api/widget-config' && request.method === 'GET') {
+      return new Response(JSON.stringify({ success: true, data: memoryStore.get('widget-config') || {} }), { headers: { ...sh, 'Content-Type': 'application/json' } });
+    }
+    if (path === '/api/widget-config' && request.method === 'PUT') { const e = auth(); if (e) return e; const b = await request.json(); memoryStore.set('widget-config', b); return new Response(JSON.stringify({ success: true, code: 'api.configSaved', message: 'Settings saved', data: b }), { headers: { ...sh, 'Content-Type': 'application/json' } }); }
+    if (path === '/api/widget-config/reset' && request.method === 'POST') { const e = auth(); if (e) return e; memoryStore.delete('widget-config'); return new Response(JSON.stringify({ success: true, code: 'api.configReset', message: 'Reset to defaults', data: {} }), { headers: { ...sh, 'Content-Type': 'application/json' } }); }
+
     if (path === '/api/widget-code') {
       const uid = url.searchParams.get('u') || '';
       return new Response(JSON.stringify({ success: true, data: `<script src="${baseUrl}/widget.js${uid ? '?u=' + uid : ''}"></script>` }), { headers: { ...sh, 'Content-Type': 'application/json' } });
     }
 
     if (path === '/api/notifications' && request.method === 'GET') { const e = auth(); if (e) return e; const us = await userStore(currentUser.id); return new Response(JSON.stringify({ success: true, data: await us.getAll() }), { headers: { ...sh, 'Content-Type': 'application/json' } }); }
-    if (path === '/api/notifications' && request.method === 'POST') { const e = auth(); if (e) return e; const b = await request.json(); if (!b?.title) return new Response(JSON.stringify({ success: false, message: '标题不能为空' }), { status: 400, headers: { ...sh, 'Content-Type': 'application/json' } }); const us = await userStore(currentUser.id); const item = await us.create(b); return new Response(JSON.stringify({ success: true, data: item }), { status: 201, headers: { ...sh, 'Content-Type': 'application/json' } }); }
+    if (path === '/api/notifications' && request.method === 'POST') { const e = auth(); if (e) return e; const b = await request.json(); if (!b?.title) return new Response(JSON.stringify({ success: false, code: 'api.titleRequired', message: 'Title is required' }), { status: 400, headers: { ...sh, 'Content-Type': 'application/json' } }); const us = await userStore(currentUser.id); const item = await us.create(b); return new Response(JSON.stringify({ success: true, data: item }), { status: 201, headers: { ...sh, 'Content-Type': 'application/json' } }); }
 
     const idM = path.match(/^\/api\/notifications\/([a-f0-9-]+)$/);
     if (idM) {
@@ -207,7 +228,7 @@ async function handleRequest(request, env) {
       const us = await userStore(currentUser.id);
       if (request.method === 'GET') {
         const item = await us.getById(idM[1]);
-        if (!item) return new Response(JSON.stringify({ success: false, message: '通知不存在' }), { status: 404, headers: { ...sh, 'Content-Type': 'application/json' } });
+        if (!item) return new Response(JSON.stringify({ success: false, code: 'api.notificationNotFound', message: 'Notification not found' }), { status: 404, headers: { ...sh, 'Content-Type': 'application/json' } });
         return new Response(JSON.stringify({ success: true, data: item }), { headers: { ...sh, 'Content-Type': 'application/json' } });
       }
       if (request.method === 'PUT') {
@@ -218,21 +239,21 @@ async function handleRequest(request, env) {
         if (b.is_emergency !== undefined) fields.is_emergency = !!b.is_emergency;
         if (b.is_active !== undefined) fields.is_active = !!b.is_active;
         const item = await us.update(idM[1], fields);
-        if (!item) return new Response(JSON.stringify({ success: false, message: '通知不存在' }), { status: 404, headers: { ...sh, 'Content-Type': 'application/json' } });
+        if (!item) return new Response(JSON.stringify({ success: false, code: 'api.notificationNotFound', message: 'Notification not found' }), { status: 404, headers: { ...sh, 'Content-Type': 'application/json' } });
         return new Response(JSON.stringify({ success: true, data: item }), { headers: { ...sh, 'Content-Type': 'application/json' } });
       }
       if (request.method === 'DELETE') {
         const ok = await us.delete(idM[1]);
-        if (!ok) return new Response(JSON.stringify({ success: false, message: '通知不存在' }), { status: 404, headers: { ...sh, 'Content-Type': 'application/json' } });
-        return new Response(JSON.stringify({ success: true, message: '删除成功' }), { headers: { ...sh, 'Content-Type': 'application/json' } });
+        if (!ok) return new Response(JSON.stringify({ success: false, code: 'api.notificationNotFound', message: 'Notification not found' }), { status: 404, headers: { ...sh, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ success: true, code: 'api.deleteSuccess', message: 'Deleted' }), { headers: { ...sh, 'Content-Type': 'application/json' } });
       }
     }
 
-    if (path === '/api/notifications/clear-all' && request.method === 'POST') { const e = auth(); if (e) return e; const us = await userStore(currentUser.id); await us.deleteAll(); return new Response(JSON.stringify({ success: true, message: '已清空' }), { headers: { ...sh, 'Content-Type': 'application/json' } }); }
+    if (path === '/api/notifications/clear-all' && request.method === 'POST') { const e = auth(); if (e) return e; const us = await userStore(currentUser.id); await us.deleteAll(); return new Response(JSON.stringify({ success: true, code: 'api.clearedAll', message: 'Cleared' }), { headers: { ...sh, 'Content-Type': 'application/json' } }); }
 
     return new Response('Not Found', { status: 404, headers: sh });
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, message: '服务器内部错误' }), { status: 500, headers: { ...sh, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: false, code: 'api.serverError', message: 'Internal server error' }), { status: 500, headers: { ...sh, 'Content-Type': 'application/json' } });
   }
 }
 

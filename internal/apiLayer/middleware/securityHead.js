@@ -15,13 +15,13 @@ function securityHead(req, res, next) {
   // 引用策略
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
-  // CSP：仅对管理页面和 API 施加严格策略
+  // CSP：对内页和 API 施加严格策略；前端脚本已内联，故 script-src 需允许 'unsafe-inline'
   // widget.js 是动态嵌入到外部网站的，不做 CSP 限制
   const pathname = req.path;
-  if (pathname === '/admin.html' || pathname.startsWith('/admin.') || pathname.startsWith('/api/')) {
+  if (pathname === '/' || pathname === '/index.html' || pathname === '/admin.html' || pathname === '/preview.html' || pathname.startsWith('/api/')) {
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     );
   }
 

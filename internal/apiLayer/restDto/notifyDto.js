@@ -13,19 +13,19 @@ class NotifyDto {
    */
   static validateCreate(body) {
     if (!body || !body.title || typeof body.title !== 'string') {
-      return { valid: false, message: '标题不能为空', data: null };
+      return { valid: false, code: 'api.titleRequired', message: 'Title is required', data: null };
     }
     if (body.title.length > 200) {
-      return { valid: false, message: '标题过长（最多200字）', data: null };
+      return { valid: false, code: 'api.titleTooLong', message: 'Title is too long (max 200 chars)', data: null };
     }
     if (body.content && typeof body.content !== 'string') {
-      return { valid: false, message: '内容格式错误', data: null };
+      return { valid: false, code: 'api.contentInvalid', message: 'Invalid content format', data: null };
     }
     if (body.content && body.content.length > 10000) {
-      return { valid: false, message: '内容过长（最多10000字）', data: null };
+      return { valid: false, code: 'api.contentTooLong', message: 'Content is too long (max 10000 chars)', data: null };
     }
     if (body.type && !ALLOWED_TYPES.includes(body.type)) {
-      return { valid: false, message: '无效的通知类型', data: null };
+      return { valid: false, code: 'api.typeInvalid', message: 'Invalid notification type', data: null };
     }
     return {
       valid: true,
@@ -48,19 +48,19 @@ class NotifyDto {
     const fields = {};
     if (body.title !== undefined) {
       if (typeof body.title !== 'string' || body.title.length > 200) {
-        return { valid: false, message: '标题无效', fields: null };
+        return { valid: false, code: 'api.titleInvalid', message: 'Invalid title', fields: null };
       }
       fields.title = body.title.trim();
     }
     if (body.content !== undefined) {
       if (typeof body.content !== 'string' || body.content.length > 10000) {
-        return { valid: false, message: '内容无效', fields: null };
+        return { valid: false, code: 'api.contentInvalidShort', message: 'Invalid content', fields: null };
       }
       fields.content = body.content.trim();
     }
     if (body.type !== undefined) {
       if (!ALLOWED_TYPES.includes(body.type)) {
-        return { valid: false, message: '类型无效', fields: null };
+        return { valid: false, code: 'api.typeInvalidShort', message: 'Invalid type', fields: null };
       }
       fields.type = body.type;
     }
@@ -92,8 +92,8 @@ class NotifyDto {
    * @param {string} message
    * @returns {object}
    */
-  static error(message) {
-    return { success: false, message };
+  static error(code, message) {
+    return { success: false, code, message: message || code };
   }
 }
 

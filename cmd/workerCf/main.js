@@ -16,12 +16,14 @@ import { cors } from 'hono/cors';
 
 // ---- 内联静态文件（构建时替换）----
 const WIDGET_JS = `__WIDGET_JS__`;
+const INDEX_HTML = `__INDEX_HTML__`;
 const ADMIN_HTML = `__ADMIN_HTML__`;
-const ADMIN_CSS = `__ADMIN_CSS__`;
-const ADMIN_JS = `__ADMIN_JS__`;
 const PREVIEW_HTML = `__PREVIEW_HTML__`;
-const ZH_CN = `__ZH_CN__`;
-const EN = `__EN__`;
+// i18n：语言注册表与全部语言包（构建脚本按 locales/config.json 注入）
+const I18N_CONFIG = JSON.parse(`__I18N_CONFIG__`);
+const I18N_LOCALES = JSON.parse(`__I18N_LOCALES__`);
+// 应用版本（构建脚本读取 VERSION 文件注入）
+const APP_VERSION = `__APP_VERSION__`;
 
 // ---- 存储实现 ----
 function createKvRepo(kvNamespace) {
@@ -138,25 +140,31 @@ app.use('*', async (c, next) => {
   c.res.headers.set('X-XSS-Protection', '1; mode=block');
   c.res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   const p = new URL(c.req.url).pathname;
-  if (p === '/admin.html' || p.startsWith('/admin.') || p.startsWith('/api/')) {
+  if (p === '/' || p === '/index.html' || p === '/admin.html' || p === '/preview.html' || p.startsWith('/api/')) {
     c.res.headers.set('Content-Security-Policy',
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'");
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'");
   }
 });
 app.use('/*', cors());
 app.use('/*', async (c, next) => { c.res.headers.set('Access-Control-Allow-Origin', '*'); return next(); });
 
-// 静态文件
+// 静态文件（CSS/JS 已全部内联到 HTML，仅保留 4 个入口）
 app.get('/widget.js', c => new Response(WIDGET_JS, { headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } }));
+app.get('/index.html', c => c.html(INDEX_HTML));
 app.get('/admin.html', c => c.html(ADMIN_HTML));
-app.get('/admin.css', c => new Response(ADMIN_CSS, { headers: { 'Content-Type': 'text/css; charset=utf-8' } }));
-app.get('/admin.js', c => new Response(ADMIN_JS, { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } }));
 app.get('/preview.html', c => c.html(PREVIEW_HTML));
-app.get('/', c => c.redirect('/admin.html'));
+app.get('/', c => c.html(INDEX_HTML));
 
-// i18n 国际化
-app.get('/api/i18n/zh-CN.json', c => new Response(ZH_CN, { headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
-app.get('/api/i18n/en.json', c => new Response(EN, { headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+// i18n 国际化：语言注册表 + 任意已注册语言包（未知语言回退到默认语言）
+app.get('/api/i18n/config', c => c.json(I18N_CONFIG));
+app.get('/api/i18n/:file', c => {
+  const file = c.req.param('file');
+  if (file === 'config.json') return c.json(I18N_CONFIG);
+  const locale = file.replace(/\.json$/, '');
+  if (!/^[A-Za-z0-9-]+$/.test(locale)) return c.json({ success: false }, 400);
+  const data = I18N_LOCALES[locale] || I18N_LOCALES[I18N_CONFIG.default];
+  return new Response(data || '{}', { headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+});
 
 // Widget 配置
 app.get('/api/widget-config', async c => {
@@ -170,12 +178,15 @@ app.put('/api/widget-config', async c => {
 });
 app.post('/api/widget-config/reset', async c => {
   await c.env.NOTIFICATIONS.delete('widget-config');
-  return c.json({ success: true, message: '已重置' });
+  return c.json({ success: true, code: 'api.configReset', message: 'Reset to defaults' });
 });
 
+// 版本信息（APP_VERSION 由构建脚本读取 VERSION 文件注入）
+app.get('/api/version', c => c.json({ success: true, data: { version: APP_VERSION } }));
+
 // 密码登录 / 注册（Worker 暂不支持，返回 501）
-app.post('/api/auth/login', c => c.json({ success: false, message: 'Worker 暂不支持密码登录，请使用 GitHub OAuth' }, 501));
-app.post('/api/auth/register', c => c.json({ success: false, message: 'Worker 暂不支持注册，请使用 GitHub OAuth' }, 501));
+app.post('/api/auth/login', c => c.json({ success: false, code: 'api.serverError', message: 'Password login is not supported on this runtime, please use OAuth' }, 501));
+app.post('/api/auth/register', c => c.json({ success: false, code: 'api.serverError', message: 'Registration is not supported on this runtime, please use OAuth' }, 501));
 
 // Providers 列表
 app.get('/api/auth/providers', c => {
@@ -228,14 +239,14 @@ app.get('/api/auth/me', async c => {
 });
 
 // 通知 API
-const now = () => { const d = new Date(); d.setHours(d.getHours() + 8); return d.toISOString().replace('T', ' ').slice(0, 19); };
+const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
 async function authMiddleware(c, next) {
   const m = (c.req.header('Cookie') || '').match(/ns_token=([^;]+)/);
-  if (!m) return c.json({ success: false, message: '请先登录' }, 401);
+  if (!m) return c.json({ success: false, code: 'api.unauthorized', message: 'Unauthorized' }, 401);
   const jwtSecret = c.env.JWT_SECRET || (c.env.JWT_SECRET_DEFAULT || 'cf-worker-secret');
   const user = await verifyJWT(m[1], jwtSecret);
-  if (!user) return c.json({ success: false, message: '登录已过期' }, 401);
+  if (!user) return c.json({ success: false, code: 'api.sessionExpired', message: 'Session expired' }, 401);
   c.set('user', user);
   return next();
 }
@@ -302,13 +313,13 @@ app.get('/api/notifications/stream', c => {
 app.get('/api/notifications/:id', authMiddleware, async c => {
   const s = await getStore(c.env, c.get('user').id);
   const item = await s.getById(c.req.param('id'));
-  if (!item) return c.json({ success: false, message: '通知不存在' }, 404);
+  if (!item) return c.json({ success: false, code: 'api.notificationNotFound', message: 'Notification not found' }, 404);
   return c.json({ success: true, data: item });
 });
 
 app.post('/api/notifications', authMiddleware, async c => {
   const body = await c.req.json();
-  if (!body?.title) return c.json({ success: false, message: '标题不能为空' }, 400);
+  if (!body?.title) return c.json({ success: false, code: 'api.titleRequired', message: 'Title is required' }, 400);
   const s = await getStore(c.env, c.get('user').id);
   const item = await s.create({ title: body.title, content: body.content || '', type: body.type || 'info', is_emergency: !!body.is_emergency });
   return c.json({ success: true, data: item }, 201);
@@ -324,21 +335,21 @@ app.put('/api/notifications/:id', authMiddleware, async c => {
   if (body.is_active !== undefined) fields.is_active = !!body.is_active;
   const s = await getStore(c.env, c.get('user').id);
   const item = await s.update(c.req.param('id'), fields);
-  if (!item) return c.json({ success: false, message: '通知不存在' }, 404);
+  if (!item) return c.json({ success: false, code: 'api.notificationNotFound', message: 'Notification not found' }, 404);
   return c.json({ success: true, data: item });
 });
 
 app.delete('/api/notifications/:id', authMiddleware, async c => {
   const s = await getStore(c.env, c.get('user').id);
   const ok = await s.delete(c.req.param('id'));
-  if (!ok) return c.json({ success: false, message: '通知不存在' }, 404);
-  return c.json({ success: true, message: '删除成功' });
+  if (!ok) return c.json({ success: false, code: 'api.notificationNotFound', message: 'Notification not found' }, 404);
+  return c.json({ success: true, code: 'api.deleteSuccess', message: 'Deleted' });
 });
 
 app.post('/api/notifications/clear-all', authMiddleware, async c => {
   const s = await getStore(c.env, c.get('user').id);
   await s.deleteAll();
-  return c.json({ success: true, message: '已清空' });
+  return c.json({ success: true, code: 'api.clearedAll', message: 'Cleared' });
 });
 
 app.get('/api/widget-code', c => {
