@@ -156,6 +156,13 @@ function sessionCookie(token, reqUrl) {
   return `ns_token=${token}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax${reqUrl.startsWith('https') ? '; Secure' : ''}`;
 }
 
+// 500 时把真实错误名/消息带回客户端（自部署工具，便于定位绑定/配额问题），完整堆栈进 tail 日志
+function serverError(c, stage, e) {
+  console.error(`[auth:${stage}]`, e && e.stack ? e.stack : e);
+  const detail = e && (e.message || String(e)) ? `${e.name || 'Error'}: ${e.message || e}` : 'Unknown error';
+  return c.json({ success: false, code: 'api.serverError', message: `Internal error (${stage}): ${detail}` }, 500);
+}
+
 // ---- OAuth2 Providers ----
 function createProviders(env, baseUrl) {
   const github = {
@@ -252,6 +259,9 @@ app.post('/api/auth/register', async c => {
     const pwdErr = validatePassword(password);
     if (pwdErr) return c.json({ success: false, message: pwdErr }, 400);
     const kv = c.env.NOTIFICATIONS;
+    if (!kv || typeof kv.put !== 'function') {
+      return c.json({ success: false, code: 'api.kvNotBound', message: 'KV namespace "NOTIFICATIONS" is not bound. Add the binding in wrangler.toml / dashboard and redeploy.' }, 503);
+    }
     const users = await readUsers(kv); // 读-改-写；读取失败会抛出，不会覆盖已有数据
     if (users[username]) return c.json({ success: false, code: 'login.usernameExists', message: 'Username already exists' }, 400);
     const { hash, salt } = await hashPassword(password);
@@ -259,7 +269,7 @@ app.post('/api/auth/register', async c => {
     await kv.put(USERS_KEY, JSON.stringify(users));
     return c.json({ success: true, code: 'login.registerSuccess', message: 'Registration successful' });
   } catch (e) {
-    return c.json({ success: false, code: 'api.serverError', message: 'Registration failed' }, 500);
+    return serverError(c, 'register', e);
   }
 });
 
@@ -272,7 +282,11 @@ app.post('/api/auth/login', async c => {
     if (!username || !password) {
       return c.json({ success: false, code: 'login.invalidCredentials', message: 'Invalid username or password' }, 401);
     }
-    const stored = (await readUsers(c.env.NOTIFICATIONS))[username];
+    const kv = c.env.NOTIFICATIONS;
+    if (!kv || typeof kv.get !== 'function') {
+      return c.json({ success: false, code: 'api.kvNotBound', message: 'KV namespace "NOTIFICATIONS" is not bound. Add the binding in wrangler.toml / dashboard and redeploy.' }, 503);
+    }
+    const stored = (await readUsers(kv))[username];
     if (!stored || !(await verifyPassword(password, stored.salt, stored.hash))) {
       return c.json({ success: false, code: 'login.invalidCredentials', message: 'Invalid username or password' }, 401);
     }
@@ -284,7 +298,7 @@ app.post('/api/auth/login', async c => {
       headers: { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': sessionCookie(token, c.req.url) }
     });
   } catch (e) {
-    return c.json({ success: false, code: 'api.serverError', message: 'Login failed' }, 500);
+    return serverError(c, 'login', e);
   }
 });
 
